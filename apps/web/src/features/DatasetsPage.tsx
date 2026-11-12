@@ -46,7 +46,7 @@ export function DatasetsPage() {
   }
 
   const card = (d: DatasetSummary, primary: boolean) => (
-    <Card key={d.id} title={lang === "kz" ? d.name_kz : d.name_ru}
+    <Card key={d.id} title={(lang === "kz" ? d.name_kz : d.name_ru).replace(/^(Основной|Негізгі) демо-корпус:\s*/i, "")}
       actions={d.id === datasetId ? <Badge tone="ok">{t("datasets.selected")}</Badge> : null}>
       <p className="small">{lang === "kz" ? d.description_kz : d.description_ru}</p>
       <div className="row" style={{ marginBottom: 12 }}>

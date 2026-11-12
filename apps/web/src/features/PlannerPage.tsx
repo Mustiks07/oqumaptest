@@ -156,9 +156,13 @@ function ScenarioCard({ sc, analysisId, canUse }: { sc: PlanScenario; analysisId
                     <span className={`plan-delta ${change.delta > 0 ? "diff-pos" : "diff-neg"}`}>{change.before} → {change.after} ч ({change.delta > 0 ? `+${change.delta}` : `−${Math.abs(change.delta)}`})</span>
                   </div>
                   <p>{lang === "kz" ? change.reason_kz : change.reason_ru}</p>
-                  {change.delta < 0 && (lang === "kz" ? change.donor_reason_kz : change.donor_reason_ru) && (
-                    <p className="xs muted"><strong>{t("planner.why_donor")}:</strong> {lang === "kz" ? change.donor_reason_kz : change.donor_reason_ru}</p>
-                  )}
+                  {change.delta < 0 && (() => {
+                    const donorReason = lang === "kz" ? change.donor_reason_kz : change.donor_reason_ru;
+                    const reason = lang === "kz" ? change.reason_kz : change.reason_ru;
+                    return donorReason && donorReason.trim() !== reason.trim()
+                      ? <p className="xs muted"><strong>{t("planner.why_donor")}:</strong> {donorReason}</p>
+                      : null;
+                  })()}
                 </article>
               ))}
             </div>

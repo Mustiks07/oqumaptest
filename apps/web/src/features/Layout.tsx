@@ -54,6 +54,10 @@ export function Layout() {
   const { dataset } = useCurrentDataset();
   const nav = useNavigate();
   const qc = useQueryClient();
+  const datasetName = dataset
+    ? (lang === "kz" ? dataset.name_kz : dataset.name_ru).replace(/^(Основной|Негізгі) демо-корпус:\s*/i, "")
+    : "";
+  const userName = user?.display_name.replace(/\s*\([^)]*демо[^)]*\)\s*/i, "");
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -66,8 +70,8 @@ export function Layout() {
         {dataset ? (
           <span className="row small header-context" style={{ gap: 8, flexWrap: "nowrap", minWidth: 0, flex: "0 1 auto", overflow: "hidden" }} data-testid="dataset-chip">
             <span className="muted">{t("header.dataset")}:</span>
-            <strong style={{ maxWidth: 320, minWidth: 40, flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={lang === "kz" ? dataset.name_kz : dataset.name_ru}>
-              {lang === "kz" ? dataset.name_kz : dataset.name_ru}
+            <strong style={{ maxWidth: 320, minWidth: 40, flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={datasetName}>
+              {datasetName}
             </strong>
           </span>
         ) : null}
@@ -84,7 +88,7 @@ export function Layout() {
         </Button>
         {user && (
           <span className="small muted" title={`${user.display_name} · ${user.org_name}`} style={{ whiteSpace: "nowrap", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }}>
-            {user.display_name}
+            {userName}
           </span>
         )}
         <Button size="sm" variant="ghost" onClick={() => { api.post("/api/v1/auth/logout").catch(() => undefined); setToken(null); setUser(null); qc.clear(); nav("/login"); }}>
