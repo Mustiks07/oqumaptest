@@ -9,6 +9,7 @@ import type {
   DatasetSummary,
   DecisionOut,
   DocumentOut,
+  EditionSummaryResult,
   Envelope,
   FragmentLink,
   GenerationOut,
@@ -126,6 +127,22 @@ export function useTopicEvidence(topicId: string | null) {
     enabled: !!datasetId && !!topicId,
     queryFn: () =>
       api.get<Envelope<TopicEvidenceResult>>(`/api/v1/topics/${topicId}/evidence`, { dataset_id: datasetId!, filters: filtersParam(filters) }),
+  });
+}
+
+/** Every topic compared for two editions + a verdict computed on the server (stored analysis, reused). */
+export function useEditionSummary(editionA?: string | null, editionB?: string | null, strata = "pre_three_level", weights = "pooled") {
+  const { datasetId, filters } = useAppState();
+  const { dataset } = useCurrentDataset();
+  const f = { ...filters, edition_ids: [] };
+  return useQuery({
+    queryKey: ["edition-summary", datasetId, dataset?.version, filtersParam(f), editionA ?? "", editionB ?? "", strata, weights],
+    enabled: !!datasetId,
+    staleTime: 300_000,
+    queryFn: () => api.post<Envelope<EditionSummaryResult>>("/api/v1/comparisons/summary", {
+      dataset_id: datasetId, edition_a_id: editionA ?? null, edition_b_id: editionB ?? null, filters: f,
+      strata_scheme: strata, weight_mode: weights,
+    }),
   });
 }
 

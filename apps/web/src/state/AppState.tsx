@@ -15,13 +15,28 @@ export const DEFAULT_FILTERS: Filters = {
   mapping_status: "confirmed_only",
 };
 
+export interface DecisionDraftForm {
+  target_group: string;
+  problem: string;
+  hypothesis: string;
+  action: string;
+  responsible: string;
+  follow_up_date: string;
+  follow_up_criterion: string;
+}
+
+/** Everything collected for a decision. Persisted (schema v2) so a reload (F5) keeps the analyses and the text. */
 export interface DecisionDraftRefs {
+  /** organisation the analysis IDs belong to: a different organisation (e.g. a new demo copy) invalidates them */
+  orgId?: string;
   topicAnalysisId?: string;
   comparisonAnalysisId?: string;
+  summaryAnalysisId?: string;
   planAnalysisId?: string;
   planPreset?: string;
   generationId?: string;
   sourceIds: string[];
+  form?: DecisionDraftForm;
 }
 
 export interface AppStateValue {
@@ -51,7 +66,9 @@ export const GUIDE_STEPS = ["overview", "topic", "compare", "plan", "decision", 
 export type GuideStep = (typeof GUIDE_STEPS)[number];
 
 const Ctx = createContext<AppStateValue | null>(null);
-const KEY = "oqumap.state.v1";
+const KEY = "oqumap.state.v2";
+const LEGACY_KEYS = ["oqumap.state.v1"];
+export const DRAFT_SCHEMA_VERSION = 2;
 
 interface Persisted {
   datasetId: string | null;
@@ -65,8 +82,11 @@ interface Persisted {
 
 function load(): Partial<Persisted> {
   try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as Partial<Persisted>) : {};
+    const raw = localStorage.getItem(KEY) ?? LEGACY_KEYS.map((k) => localStorage.getItem(k)).find(Boolean) ?? null;
+    const parsed = raw ? (JSON.parse(raw) as Partial<Persisted> & { schema?: number }) : {};
+    // v1 → v2: same fields; the draft simply had no form / organisation yet
+    if (parsed.draft && !Array.isArray(parsed.draft.sourceIds)) parsed.draft = { sourceIds: [] };
+    return parsed;
   } catch {
     return {};
   }
@@ -86,11 +106,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ datasetId, filters, topicId, editionA, editionB, draft, progress }));
+      localStorage.setItem(KEY, JSON.stringify({ schema: DRAFT_SCHEMA_VERSION, datasetId, filters, topicId, editionA, editionB, draft, progress }));
     } catch {
       /* ignore */
     }
   }, [datasetId, filters, topicId, editionA, editionB, draft, progress]);
+
+  useEffect(() => {
+    if (user?.org_id && draft.orgId && draft.orgId !== user.org_id) setDraft({ sourceIds: [] });
+  }, [user?.org_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setDatasetId = useCallback((id: string | null) => {
     setDatasetIdState((prev) => {
@@ -120,7 +144,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setB(b);
     },
     draft,
-    updateDraft: (patch) => setDraft((d) => ({ ...d, ...patch })),
+    updateDraft: (patch) => setDraft((d) => ({ ...d, ...patch, orgId: user?.org_id ?? d.orgId })),
     resetDraft: () => setDraft({ sourceIds: [] }),
     assistantOpen,
     setAssistantOpen,

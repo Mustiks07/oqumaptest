@@ -39,7 +39,7 @@ export interface Curriculum {
   topics: { id: string; code: string; title_ru: string; title_kz: string; kz_verified: boolean; order: number }[];
   objectives: { id: string; code: string; topic_id: string; text_ru: string; text_kz: string; kz_verified: boolean }[];
   relations: { source: string; target: string; type: string; confirmed: boolean }[];
-  editions: { id: string; code: string; title: string; edition_label: string; year: number; language: string; is_demo: boolean; document_id: string | null }[];
+  editions: { id: string; code: string; title: string; edition_label: string; year: number; language: string; is_demo: boolean; document_id: string | null; name_ru?: string; name_kz?: string }[];
   schools: { id: string; code: string; name: string }[];
   cohorts: { id: string; code: string; school_id: string; language: string; academic_year: string }[];
   assessments: { id: string; code: string; stage: string; form: string; scale: string }[];
@@ -141,3 +141,8 @@ export type ComparisonRequest = S["ComparisonRequest"];
 export type PlanSolveRequest = S["PlanSolveRequest"];
 export type TopicInput = S["TopicInput"];
 export type DecisionCreate = S["DecisionCreate"];
+export type EditionSummaryResult = S["EditionSummaryResult"];
+export type EditionSummaryRow = S["EditionSummaryRow"];
+export type EditionVerdict = S["EditionVerdict"];
+export type CoherenceIssue = S["CoherenceIssue"];
+export type DecisionCheck = S["DecisionCheck"];
