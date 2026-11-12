@@ -3685,9 +3685,9 @@ export interface components {
             /** Item Id */
             item_id: string;
             /** N Answered */
-            n_answered: number;
+            n_answered: number | null;
             /** N Omitted */
-            n_omitted: number;
+            n_omitted: number | null;
             /** Objectives */
             objectives: {
                 [key: string]: unknown;
@@ -3909,6 +3909,8 @@ export interface components {
             code: string;
             /** Diagnostic Check Ru */
             diagnostic_check_ru: string;
+            /** Eligible Learners */
+            eligible_learners?: number | null;
             /** Interpretation */
             interpretation: string;
             /** Items */
@@ -3917,8 +3919,23 @@ export interface components {
             label_kz: string;
             /** Label Ru */
             label_ru: string;
+            /**
+             * Method
+             * @default repeated_selection_v2
+             */
+            method: string;
+            /** Method Note Kz */
+            method_note_kz?: string | null;
+            /** Method Note Ru */
+            method_note_ru?: string | null;
             /** N Learners */
-            n_learners: number;
+            n_learners: number | null;
+            /** Opportunity Denominator */
+            opportunity_denominator?: number | null;
+            /** Opportunity Share */
+            opportunity_share?: number | null;
+            /** Selection Numerator */
+            selection_numerator?: number | null;
             /** Share Of Learners */
             share_of_learners: number | null;
         } & {
@@ -4040,7 +4057,7 @@ export interface components {
             /** Correct */
             correct: boolean;
             /** Count */
-            count: number;
+            count: number | null;
             /** Key */
             key: string;
             /** Misconception */
@@ -4479,8 +4496,25 @@ export interface components {
             code: string;
             /** Delta */
             delta: number;
+            /** Donor Reason Kz */
+            donor_reason_kz?: string | null;
+            /** Donor Reason Ru */
+            donor_reason_ru?: string | null;
+            /** Evidence */
+            evidence: {
+                [key: string]: unknown;
+            };
             /** Priority */
             priority: number;
+            /**
+             * Reason Kind
+             * @enum {string}
+             */
+            reason_kind: "investment" | "donor" | "protected" | "unchanged";
+            /** Reason Kz */
+            reason_kz: string;
+            /** Reason Ru */
+            reason_ru: string;
             /** Title */
             title: string;
             /** Topic Id */
@@ -4519,6 +4553,8 @@ export interface components {
             hours: {
                 [key: string]: number;
             } | null;
+            /** Human Status */
+            human_status?: ("ready" | "needs_attention") | null;
             /** Input Errors */
             input_errors?: {
                 [key: string]: unknown;
@@ -4544,6 +4580,10 @@ export interface components {
             status_message_kz?: string | null;
             /** Status Message Ru */
             status_message_ru?: string | null;
+            /** Technical Details */
+            technical_details?: {
+                [key: string]: unknown;
+            } | null;
             /** Total After */
             total_after?: number | null;
             /** Total Before */
@@ -4552,6 +4592,10 @@ export interface components {
             validation: {
                 [key: string]: unknown;
             } | null;
+            /** Verdict Kz */
+            verdict_kz?: string | null;
+            /** Verdict Ru */
+            verdict_ru?: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -5097,7 +5141,7 @@ export interface components {
             }[];
             /** Exclusions */
             exclusions: {
-                [key: string]: number;
+                [key: string]: number | null;
             };
             /** Items */
             items: components["schemas"]["ItemEvidence"][];
@@ -5120,6 +5164,13 @@ export interface components {
             /** Status */
             status: string;
             summary: components["schemas"]["MeanSummary"] | null;
+            /**
+             * Suppressed
+             * @default false
+             */
+            suppressed: boolean;
+            /** Suppression Reason */
+            suppression_reason?: string | null;
             /** Topic */
             topic: {
                 [key: string]: unknown;
@@ -5185,6 +5236,13 @@ export interface components {
             status: string;
             /** Status Reason */
             status_reason: string | null;
+            /**
+             * Suppressed
+             * @default false
+             */
+            suppressed: boolean;
+            /** Suppression Reason */
+            suppression_reason?: string | null;
             /** Title Kz */
             title_kz: string;
             /** Title Ru */

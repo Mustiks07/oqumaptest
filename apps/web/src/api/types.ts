@@ -62,6 +62,19 @@ export interface PlanContextTopic {
   topic_status: string | null;
   score: number | null;
   recommend_diagnostic: boolean;
+  protected_from_reduction: boolean;
+  protection_reason_ru: string | null;
+  protection_reason_kz: string | null;
+  planning_facts: {
+    status?: string | null;
+    score?: number | null;
+    weakest_objective?: { code: string; text_ru: string; text_kz: string; score: number } | null;
+    prerequisites?: { code: string; topic_code: string; text_ru: string; text_kz: string; score: number | null; confirmed: boolean }[];
+    prerequisite_support_for?: { code: string; title_ru: string; title_kz: string; score: number }[];
+    protected_from_reduction?: boolean;
+    protection_reason_ru?: string | null;
+    protection_reason_kz?: string | null;
+  };
 }
 
 export interface PlanContext {

@@ -5146,12 +5146,26 @@
             "type": "string"
           },
           "n_answered": {
-            "title": "N Answered",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Answered"
           },
           "n_omitted": {
-            "title": "N Omitted",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Omitted"
           },
           "objectives": {
             "items": {
@@ -5801,6 +5815,17 @@
             "title": "Diagnostic Check Ru",
             "type": "string"
           },
+          "eligible_learners": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eligible Learners"
+          },
           "interpretation": {
             "title": "Interpretation",
             "type": "string"
@@ -5820,9 +5845,76 @@
             "title": "Label Ru",
             "type": "string"
           },
+          "method": {
+            "default": "repeated_selection_v2",
+            "title": "Method",
+            "type": "string"
+          },
+          "method_note_kz": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method Note Kz"
+          },
+          "method_note_ru": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method Note Ru"
+          },
           "n_learners": {
-            "title": "N Learners",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Learners"
+          },
+          "opportunity_denominator": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Denominator"
+          },
+          "opportunity_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opportunity Share"
+          },
+          "selection_numerator": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Numerator"
           },
           "share_of_learners": {
             "anyOf": [
@@ -6327,8 +6419,15 @@
             "type": "boolean"
           },
           "count": {
-            "title": "Count",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
           },
           "key": {
             "title": "Key",
@@ -7780,9 +7879,54 @@
             "title": "Delta",
             "type": "integer"
           },
+          "donor_reason_kz": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Donor Reason Kz"
+          },
+          "donor_reason_ru": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Donor Reason Ru"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
           "priority": {
             "title": "Priority",
             "type": "number"
+          },
+          "reason_kind": {
+            "enum": [
+              "investment",
+              "donor",
+              "protected",
+              "unchanged"
+            ],
+            "title": "Reason Kind",
+            "type": "string"
+          },
+          "reason_kz": {
+            "title": "Reason Kz",
+            "type": "string"
+          },
+          "reason_ru": {
+            "title": "Reason Ru",
+            "type": "string"
           },
           "title": {
             "title": "Title",
@@ -7800,7 +7944,11 @@
           "before",
           "after",
           "delta",
-          "priority"
+          "priority",
+          "reason_kind",
+          "reason_ru",
+          "reason_kz",
+          "evidence"
         ],
         "title": "PlanChange",
         "type": "object"
@@ -7898,6 +8046,21 @@
             ],
             "title": "Hours"
           },
+          "human_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ready",
+                  "needs_attention"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Status"
+          },
           "input_errors": {
             "anyOf": [
               {
@@ -7985,6 +8148,18 @@
             ],
             "title": "Status Message Ru"
           },
+          "technical_details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Details"
+          },
           "total_after": {
             "anyOf": [
               {
@@ -8018,6 +8193,28 @@
               }
             ],
             "title": "Validation"
+          },
+          "verdict_kz": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict Kz"
+          },
+          "verdict_ru": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict Ru"
           }
         },
         "required": [
@@ -9567,7 +9764,14 @@
           },
           "exclusions": {
             "additionalProperties": {
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "title": "Exclusions",
             "type": "object"
@@ -9635,6 +9839,22 @@
                 "type": "null"
               }
             ]
+          },
+          "suppressed": {
+            "default": false,
+            "title": "Suppressed",
+            "type": "boolean"
+          },
+          "suppression_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suppression Reason"
           },
           "topic": {
             "additionalProperties": true,
@@ -9822,6 +10042,22 @@
               }
             ],
             "title": "Status Reason"
+          },
+          "suppressed": {
+            "default": false,
+            "title": "Suppressed",
+            "type": "boolean"
+          },
+          "suppression_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suppression Reason"
           },
           "title_kz": {
             "title": "Title Kz",
