@@ -1084,6 +1084,45 @@
         "title": "CalendarRequest",
         "type": "object"
       },
+      "CoherenceIssue": {
+        "additionalProperties": true,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message_kz": {
+            "title": "Message Kz",
+            "type": "string"
+          },
+          "message_ru": {
+            "title": "Message Ru",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Params",
+            "type": "object"
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "warning"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message_ru",
+          "message_kz"
+        ],
+        "title": "CoherenceIssue",
+        "type": "object"
+      },
       "CommitRequest": {
         "properties": {
           "batch_id": {
@@ -1675,6 +1714,28 @@
         "title": "DateRange",
         "type": "object"
       },
+      "DecisionCheck": {
+        "additionalProperties": true,
+        "properties": {
+          "blocking": {
+            "title": "Blocking",
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/CoherenceIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          }
+        },
+        "required": [
+          "issues",
+          "blocking"
+        ],
+        "title": "DecisionCheck",
+        "type": "object"
+      },
       "DecisionCreate": {
         "properties": {
           "action": {
@@ -1848,6 +1909,14 @@
               }
             ],
             "title": "Approved By"
+          },
+          "coherence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CoherenceIssue"
+            },
+            "title": "Coherence",
+            "type": "array"
           },
           "created_at": {
             "title": "Created At",
@@ -9192,6 +9261,28 @@
             "title": "Lang",
             "type": "string"
           },
+          "plan_analysis_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Analysis Id"
+          },
+          "plan_preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Preset"
+          },
           "topic_analysis_id": {
             "title": "Topic Analysis Id",
             "type": "string"
@@ -13843,6 +13934,116 @@
           }
         },
         "summary": "Create Decision",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
+    "/api/v1/decisions/check": {
+      "post": {
+        "description": "Coherence of a draft card: plan hours in the action, material vs comparison, stale or missing analyses.",
+        "operationId": "check_decision_api_v1_decisions_check_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Check Decision",
         "tags": [
           "decisions"
         ]

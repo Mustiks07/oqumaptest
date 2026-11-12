@@ -184,8 +184,12 @@ def solve(session: Session, org_id: str, req: PlanSolveRequest, user_id: str | N
             res = pl.solve(scenario_problem)
             if name == "minimal_changes" and res.get("changes") and not any(c["delta"] for c in res["changes"]):
                 # A conservative scenario must still answer the user's question when priorities clearly differ.
+                # Smallest meaningful move: a lower change penalty, but no topic moves by more than one hour, so the
+                # conservative scenario never changes more than the balanced one.
                 retry = pl.preset(problem, name)
                 retry.change_penalty = min(retry.change_penalty, 0.03)
+                for t in retry.topics:
+                    t.max_change = 1 if t.max_change is None else min(t.max_change, 1)
                 candidate = pl.solve(retry)
                 if candidate.get("changes") and any(c["delta"] for c in candidate["changes"]):
                     res = candidate

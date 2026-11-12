@@ -432,6 +432,19 @@ class AssistantAnswer(GenerationOut):
     sources: list[dict[str, Any]]
 
 
+class CoherenceIssue(Model):
+    code: str
+    severity: Literal["critical", "warning"]
+    message_ru: str
+    message_kz: str
+    params: dict[str, Any] = {}
+
+
+class DecisionCheck(Model):
+    issues: list[CoherenceIssue]
+    blocking: bool
+
+
 class DecisionOut(Model):
     id: str
     decision_group_id: str
@@ -462,6 +475,7 @@ class DecisionOut(Model):
     history: list[dict[str, Any]]
     follow_ups: list[dict[str, Any]]
     is_synthetic: bool
+    coherence: list[CoherenceIssue] = []
 
 
 class FollowUpResponse(Envelope[dict[str, Any]]):

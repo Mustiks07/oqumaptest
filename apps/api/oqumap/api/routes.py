@@ -775,6 +775,12 @@ def create_decision(body: decisions.DecisionCreate, p: P, session: DB):
     return decisions.create(session, p, body)
 
 
+@router.post("/decisions/check", response_model=S.DecisionCheck, tags=["decisions"])
+def check_decision(body: decisions.DecisionCreate, p: P, session: DB):
+    """Coherence of a draft card: plan hours in the action, material vs comparison, stale or missing analyses."""
+    return decisions.check_draft(session, p, body)
+
+
 @router.get("/decisions", tags=["decisions"])
 def list_decisions(p: P, session: DB, dataset_id: str | None = None) -> list[dict[str, Any]]:
     return decisions.list_decisions(session, p.org_id, dataset_id)
@@ -875,6 +881,8 @@ class MisconceptionReq(AnalysisLang):
 class RecommendReq(BaseModel):
     topic_analysis_id: str
     comparison_analysis_id: str | None = None
+    plan_analysis_id: str | None = None
+    plan_preset: str | None = None
     lang: str = "ru"
 
 
@@ -914,7 +922,8 @@ def interpret_misconception(body: MisconceptionReq, p: P, session: DB):
 def recommend(body: RecommendReq, p: P, session: DB):
     ratelimit.check(session, "ai", p.user_id, "rate_ai")
     with use_gate(LiveGate.for_principal(session, p)):
-        return ai.recommend(session, p.org_id, body.topic_analysis_id, body.comparison_analysis_id, body.lang)
+        return ai.recommend(session, p.org_id, body.topic_analysis_id, body.comparison_analysis_id, body.lang,
+                            body.plan_analysis_id, body.plan_preset)
 
 
 @router.post("/assistant/query", response_model=S.AssistantAnswer, tags=["ai"])

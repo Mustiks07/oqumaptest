@@ -291,87 +291,152 @@ REC_SCHEMA = {
 
 
 def recommend(session: Session, org_id: str, topic_analysis_id: str, comparison_analysis_id: str | None = None,
-              lang: str = "ru") -> dict:
+              lang: str = "ru", plan_analysis_id: str | None = None, plan_preset: str | None = None) -> dict:
+    """Decision draft built from computed facts: topic analysis, hour plan scenario and the programme-wide edition
+    comparison. The action always states the number of hours, where they come from and which edition's fragment is
+    used (the edition that is stronger in this topic, unless it has no fragment — then the reason is stated)."""
+    from ..services import edition_summary as es
+    from ..services import recommendation as rec
+    from ..services.decision_checks import check_text_coherence
+    from ..services.labels import Humanizer, leftover_internal
+
     topic_run = an.get_run(session, org_id, topic_analysis_id)
     if topic_run["context"]["kind"] != "topic_evidence":
         raise ApiError("wrong_analysis_kind", "Ожидается анализ темы", 422)
+    tctx = topic_run["context"]
     comp = an.get_run(session, org_id, comparison_analysis_id)["result"] if comparison_analysis_id else None
     tr = topic_run["result"]
-    sources = tr["sources"][:6]
+    filters = an.Filters(**tctx["filters"])
+    meta = an.load_meta(session, org_id, tctx["dataset_id"])
+    hum = Humanizer.from_meta(meta)
+    names = {t.code: (t.title_ru, t.title_kz) for t in meta.topics}
+    summ = rec.summary_for(session, org_id, tctx["dataset_id"], filters, None)
+    row = es.row_for(summ["result"], tr["topic"]["code"]) if summ else None
+    scen = rec.plan_scenario(session, org_id, tctx["dataset_id"], filters, None, plan_analysis_id, plan_preset)
+    hs = rec.hours_story(scen, tr["topic"]["code"], names)
+    mat = rec.material_choice(tr, row, summ["result"]["editions"] if summ else None)
+    sources = mat["sources"] + [x for x in tr["sources"] if x["source_id"] not in mat["source_ids"]][:4]
     metrics = {
         "topic_score": (tr["summary"] or {}).get("mean"), "n_learners": (tr["summary"] or {}).get("n_learners"),
         "n_classes": (tr["summary"] or {}).get("n_classes"),
         "objectives": {o["code"]: (o["score"] or {}).get("mean") for o in tr["objectives"]},
-        "misconceptions": {x["code"]: {"n": x["n_learners"], "share": x["share_of_learners"]} for x in tr["misconceptions"][:3]},
+        "prerequisites": {p["code"]: (p["score"] or {}).get("mean") for p in tr["prerequisites"]},
+        "misconceptions": {x["code"]: {"n": x["n_learners"], "share": x["share_of_learners"]} for x in tr["misconceptions"]},
         "comparison": _comparison_metrics(comp) if comp else None,
+        "edition_row": None if row is None else {"adjusted_difference": row["adjusted_difference"], "ci": row["ci"]},
+        "hours": None if hs is None else {"before": hs["before"], "after": hs["after"], "delta": hs["delta"],
+                                          "donors": [{"before": d["before"], "after": d["after"], "delta": d["delta"]} for d in hs["donors"]]},
+        "_pages": [int(x["page_printed"]) for x in sources if str(x.get("page_printed") or "").isdigit()],
     }
-    src_payload = [{"source_id": s["source_id"], "edition": s["edition_code"], "page_printed": s["page_printed"],
+    src_payload = [{"source_id": s["source_id"], "edition": hum.edition(s["edition_code"], lang), "page_printed": s["page_printed"],
                     "anchor": s["anchor"], "status": s["status"], "excerpt": s["excerpt"]} for s in sources]
-    ctx = {"topic_analysis_id": topic_analysis_id, "comparison_analysis_id": comparison_analysis_id, "metrics": metrics,
+    template = _recommend_template(tr, hs, mat, row, summ["result"]["editions"] if summ else None, hum, lang)
+    facts_for_model = {
+        "topic": hum.topic(tr["topic"]["code"], lang), "metrics": metrics, "draft": template,
+        "hours_plan": None if hs is None else {k: hs[k] for k in ("before", "after", "delta", "action_ru" if lang == "ru" else "action_kz")},
+        "material": {"why": mat["why_ru"] if lang == "ru" else mat["why_kz"],
+                     "labels": mat["labels_ru"] if lang == "ru" else mat["labels_kz"]},
+    }
+    ctx = {"topic_analysis_id": topic_analysis_id, "comparison_analysis_id": comparison_analysis_id,
+           "plan_analysis_id": hs["analysis_id"] if hs else None, "plan_preset": hs["preset"] if hs else None,
+           "edition_summary_id": summ["context"]["analysis_id"] if summ else None, "metrics": metrics,
            "sources": src_payload, "lang": lang}
-    data, meta = _live_or_none(
+    data, meta_l = _live_or_none(
         "recommend",
-        SYSTEM_BASE + " Сформулируй методическую рекомендацию: проблема, гипотеза, действие, способ проверки, "
-        "ограничения. В citations укажи source_id только из переданных источников.",
-        ctx, REC_SCHEMA, synthetic=bool(topic_run["context"]["is_synthetic"]))
+        SYSTEM_BASE + " Улучши формулировку черновика методической рекомендации (draft), не меняя чисел, часов, "
+        "выбранного пособия и источников. Называй темы, цели и пособия словами; не используй внутренние коды. "
+        "В citations укажи source_id только из переданных источников. Язык ответа: " + ("русский." if lang == "ru" else "казахский."),
+        {**facts_for_model, "sources": src_payload}, REC_SCHEMA, synthetic=bool(tctx["is_synthetic"]))
     ctx_text = " ".join(s["excerpt"] for s in src_payload)
     if data is not None:
+        for k in ("problem", "hypothesis", "action", "check"):
+            data[k] = hum.text(data[k], lang)
+        data["limitations"] = [hum.text(x, lang) for x in data["limitations"]]
         text = " ".join([data["problem"], data["hypothesis"], data["action"], data["check"], *data["limitations"]])
         num = verify.check_numbers(text, metrics, ctx_text)
         allowed = {s["source_id"] for s in src_payload}
         cit = verify.check_citations(session, org_id, data["citations"])
         if any(c not in allowed for c in data["citations"]):
             cit = {"status": "failed", "missing": [c for c in data["citations"] if c not in allowed], "checked": len(data["citations"])}
-        if num["status"] == "passed" and cit["status"] == "passed":
-            g = _record(session, org_id, "recommend", meta["mode"], ctx, data, data["citations"],
-                        {"numbers": num, "citations": cit}, meta["model"], meta["provider"], latency_ms=meta.get("latency_ms"))
+        coherence = check_text_coherence(data["action"], hs, mat, {s["source_id"]: s for s in sources}, data["citations"])
+        leftovers = leftover_internal(text)
+        if num["status"] == "passed" and cit["status"] == "passed" and not coherence and not leftovers:
+            out = {**template, **{k: data[k] for k in ("problem", "hypothesis", "action", "check", "limitations", "citations")}}
+            g = _record(session, org_id, "recommend", meta_l["mode"], ctx, out, data["citations"],
+                        {"numbers": num, "citations": cit, "coherence": "passed"}, meta_l["model"], meta_l["provider"],
+                        latency_ms=meta_l.get("latency_ms"))
             return generation_payload(g, lang)
-        meta["fallback_reason"] = "verification_failed"
-    out = _recommend_template(tr, comp, sources, lang)
-    num = verify.check_numbers(" ".join([out["problem"], out["hypothesis"], out["action"], out["check"]]), metrics, ctx_text)
-    cit = verify.check_citations(session, org_id, out["citations"])
-    g = _record(session, org_id, "recommend", "template", ctx, out, out["citations"], {"numbers": num, "citations": cit},
-                fallback_reason=meta.get("fallback_reason"), provider=meta.get("provider", "none"),
-                template_version="template-recommend-v1")
+        meta_l["fallback_reason"] = "verification_failed" if num["status"] != "passed" or cit["status"] != "passed" else (
+            "incoherent_action" if coherence else "internal_codes_in_text")
+    num = verify.check_numbers(" ".join([template["problem"], template["hypothesis"], template["action"], template["check"]]),
+                               metrics, ctx_text)
+    cit = verify.check_citations(session, org_id, template["citations"])
+    g = _record(session, org_id, "recommend", "template", ctx, template, template["citations"], {"numbers": num, "citations": cit},
+                fallback_reason=meta_l.get("fallback_reason"), provider=meta_l.get("provider", "none"),
+                template_version="template-recommend-v2")
     return generation_payload(g, lang)
 
 
-def _recommend_template(tr: dict, comp: dict | None, sources: list[dict], lang: str) -> dict:
+def _recommend_template(tr: dict, hs: dict | None, mat: dict, row: dict | None, editions: dict | None, hum, lang: str) -> dict:
     t = tr["topic"]
     title = t["title_ru"] if lang == "ru" else t["title_kz"]
     s = tr["summary"] or {}
-    measured = [o for o in tr["objectives"] if o["score"]]
-    weakest = min(measured, key=lambda o: o["score"]["mean"]) if measured else None
-    top = tr["misconceptions"][0] if tr["misconceptions"] else None
-    confirmed = [x for x in sources if x["status"] == "confirmed"] or sources
-    cites = [x["source_id"] for x in confirmed[:3]]
-    ref = "; ".join(dict.fromkeys(
-        f"{x['edition_code']} " + (f"с. {x['page_printed']}" if x["page_printed"] else x["anchor"])
-        + ("" if x["status"] == "confirmed" else " (связь не подтверждена)") for x in confirmed[:3]))
+    weak = mat["weakest_objective"]
+    # the most frequent error hypothesis among the items of the weakest objective (else the most frequent overall)
+    weak_items = {it["code"] for it in tr["items"] if weak and any(ol["code"] == weak["code"] for ol in it.get("objectives", []))}
+    top = max((x for x in tr["misconceptions"] if weak_items & set(x["items"])), key=lambda x: x["n_learners"], default=None) \
+        or (tr["misconceptions"][0] if tr["misconceptions"] else None)
+    from ..services.recommendation import plural
+    weak_pre = min((p for p in tr["prerequisites"] if p["score"] and p["score"]["mean"] < 0.70),
+                   key=lambda p: p["score"]["mean"], default=None)
+    cites = mat["source_ids"]
+    labels = mat["labels_ru"] if lang == "ru" else mat["labels_kz"]
     if lang == "ru":
-        problem = (f"Тема {t['code']} «{title}»: средняя доля баллов {_pct(s.get('mean'))} "
-                   f"({s.get('n_learners')} уч., {s.get('n_classes')} кл.)"
-                   + (f"; слабее всего цель {weakest['code']} — {_pct(weakest['score']['mean'])}." if weakest else "."))
-        hypothesis = (f"Частый выбор дистрактора «{top['label_ru']}» ({top['n_learners']} уч.) указывает на возможное "
-                      "заблуждение; это гипотеза для проверки." if top else "Причина затруднения требует дополнительной диагностики.")
-        action = ("Добавить в план часы на тему за счёт допустимого перераспределения, использовать объяснение через модели "
-                  f"(полоса, числовая прямая) — см. {ref or 'материалы не связаны'}.")
-        if comp and comp.get("adjusted", {}).get("difference") is not None:
-            action += (f" В сопоставимых группах разница {comp['editions']['b']['code']} − {comp['editions']['a']['code']} "
-                       f"составила {_pp(comp['adjusted']['difference'])} (статус: {COMPARABILITY[comp['status']][0].lower()}).")
-        check = (f"Повторная проверка по общим заданиям темы; критерий — рост доли баллов и снижение доли выбора "
-                 f"дистрактора{' «' + top['label_ru'] + '»' if top else ''}." )
-        limits = ["Наблюдательные данные; причинный эффект не оценивался.",
-                  "Гипотеза о заблуждении требует подтверждения диагностическим заданием."]
+        nl, nc = s.get("n_learners") or 0, s.get("n_classes") or 0
+        problem = (f"Тема «{title}»: средний результат {_pct(s.get('mean'))} ({nl} {plural(nl, ('ученик', 'ученика', 'учеников'))}, "
+                   f"{nc} {plural(nc, ('класс', 'класса', 'классов'))})"
+                   + (f"; слабее всего цель «{weak['text_ru']}» — {_pct(weak['score'])}" if weak else "") + "."
+                   + (f" Опорное умение «{weak_pre['text_ru']}» — {_pct(weak_pre['score']['mean'])}." if weak_pre else ""))
+        hypothesis = (f"Частый выбор неверного ответа «{top['label_ru']}» ({top['n_learners']} "
+                      f"{plural(top['n_learners'], ('ученик', 'ученика', 'учеников'))}, {_pct(top['share_of_learners'])}) указывает на возможное "
+                      "заблуждение; это гипотеза, которую нужно проверить диагностическим заданием."
+                      if top else "Причина затруднения требует дополнительной диагностики.")
+        action = hs["action_ru"] if hs else "Сохранить часы темы: план часов не прикреплён к решению."
+        if labels:
+            action += f" Для объяснения использовать: {'; '.join(labels)}. {mat['why_ru']}"
+            if mat["unconfirmed_link"]:
+                action += " Связь фрагмента с целью предложена системой — подтвердите её в разделе «Материалы»."
+        check = ("Повторная проверка по общим заданиям темы: критерий — рост среднего результата по теме"
+                 + (f" и снижение доли учеников, выбирающих ошибку «{top['label_ru']}»" if top else "") + ".")
+        limits = ["Данные наблюдательные: показатели описывают связь и не доказывают причинного влияния.",
+                  "Перенос часов — распределение приоритетов в рамках бюджета, а не прогноз роста баллов."]
+        if row is not None:
+            limits.append("Сравнение пособий по всем темам разведочное: решение принимается по теме, а не по общему рейтингу.")
+        if mat["unconfirmed_link"]:
+            limits.append("Связь выбранного фрагмента с целью ещё не подтверждена методистом.")
     else:
-        problem = f"{t['code']} «{title}» тақырыбы: орташа үлес {_pct(s.get('mean'))}."
-        hypothesis = (f"«{top['label_kz']}» дистракторын жиі таңдау ықтимал қате түсінікті көрсетеді; бұл тексерілетін гипотеза."
-                      if top else "Қосымша диагностика қажет.")
-        action = f"Тақырыпқа сағат қосу және модельдер арқылы түсіндіру — {ref}."
-        check = "Тақырыптың ортақ тапсырмалары бойынша қайта тексеру."
-        limits = ["Бақылау деректері; себептік әсер бағаланбаған."]
+        problem = (f"«{title}» тақырыбы: орташа нәтиже {_pct(s.get('mean'))} ({s.get('n_learners')} оқушы, {s.get('n_classes')} сынып)"
+                   + (f"; ең әлсіз мақсат «{weak['text_kz']}» — {_pct(weak['score'])}" if weak else "") + "."
+                   + (f" Тірек дағды «{weak_pre['text_kz']}» — {_pct(weak_pre['score']['mean'])}." if weak_pre else ""))
+        hypothesis = (f"«{top['label_kz']}» қате жауабын жиі таңдау ({top['n_learners']} оқушы) ықтимал қате түсінікті көрсетеді; "
+                      "бұл диагностикалық тапсырмамен тексерілетін гипотеза." if top else "Қосымша диагностика қажет.")
+        action = hs["action_kz"] if hs else "Тақырып сағатын сақтау: шешімге сағат жоспары тіркелмеген."
+        if labels:
+            action += f" Түсіндіру үшін: {'; '.join(labels)}. {mat['why_kz']}"
+            if mat["unconfirmed_link"]:
+                action += " Үзіндінің мақсатпен байланысын жүйе ұсынды — оны «Материалдар» бөлімінде растаңыз."
+        check = ("Тақырыптың ортақ тапсырмалары бойынша қайта тексеру: өлшем — тақырып бойынша орташа нәтиженің өсуі"
+                 + (f" және «{top['label_kz']}» қатесін таңдайтын оқушылар үлесінің азаюы" if top else "") + ".")
+        limits = ["Бақылау деректері: көрсеткіштер байланысты сипаттайды, себептік әсерді дәлелдемейді.",
+                  "Сағатты ауыстыру — бюджет шегінде басымдықтарды бөлу, ұпай өсуінің болжамы емес."]
+        if row is not None:
+            limits.append("Барлық тақырып бойынша құралдарды салыстыру барлау сипатында: шешім жалпы рейтинг бойынша емес, тақырып бойынша қабылданады.")
+        if mat["unconfirmed_link"]:
+            limits.append("Таңдалған үзіндінің мақсатпен байланысы әлі әдіскермен расталмаған.")
     return {"problem": problem, "hypothesis": hypothesis, "action": action, "check": check, "limitations": limits,
-            "citations": cites}
+            "citations": cites,
+            "hours": hs, "material": {k: mat[k] for k in ("kind", "favoured_edition_code", "source_ids", "labels_ru", "labels_kz",
+                                                         "why_ru", "why_kz", "unconfirmed_link")}}
 
 
 # ---------------------------------------------------------------------------

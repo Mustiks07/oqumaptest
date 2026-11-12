@@ -16,6 +16,7 @@ from ..analytics.paired import paired_change
 from ..db import new_id, utcnow
 from ..errors import ApiError, not_found
 from . import analysis as an
+from . import decision_checks
 from .auth import Principal
 from .common import audit
 from .documents import source_payload
@@ -122,6 +123,12 @@ def create(session: Session, p: Principal, body: DecisionCreate) -> dict:
             raise not_found("generation", body.generation_id)
         snapshot["ai"] = {"generation_id": g.id, "mode": g.mode, "task": g.task, "model": g.model,
                           "verification": g.verification}
+        # structured facts behind the draft (hours, donors, chosen material and why) for the report
+        if isinstance(g.output, dict) and (g.output.get("hours") or g.output.get("material")):
+            snapshot["recommendation"] = {"hours": g.output.get("hours"), "material": g.output.get("material")}
+    snapshot["coherence"] = decision_checks.evaluate(
+        session, p.org_id, ds, body.topic_id, body.action, body.analysis_ids, body.plan_analysis_id, body.plan_preset,
+        [(s.get("edition") or {}).get("code") for s in sources])
 
     if body.supersedes_id:
         prev = session.scalar(select(m.Decision).where(m.Decision.id == body.supersedes_id, m.Decision.org_id == p.org_id))
@@ -165,6 +172,10 @@ def approve(session: Session, p: Principal, decision_id: str, note: str | None) 
     if ds.version != d.dataset_version:
         raise ApiError("stale_decision", "Данные изменились после подготовки решения; подготовьте новую версию", 409,
                        {"decision_version": d.dataset_version, "current_version": ds.version})
+    critical = decision_checks.blocking(coherence_for(session, d, ds))
+    if critical:
+        raise ApiError("decision_incoherent", "Решение противоречиво: " + " ".join(x["message_ru"] for x in critical), 409,
+                       {"issues": critical})
     approved = m.Decision(
         org_id=d.org_id, decision_group_id=d.decision_group_id, version=d.version + 1, dataset_id=d.dataset_id,
         dataset_version=d.dataset_version, filters=d.filters, target_group=d.target_group, topic_id=d.topic_id,
@@ -178,6 +189,27 @@ def approve(session: Session, p: Principal, decision_id: str, note: str | None) 
     audit(session, p.org_id, p.user_id, "decision.approve", "decision", approved.id, previous=d.id)
     session.commit()
     return decision_payload(session, approved)
+
+
+def coherence_for(session: Session, d: m.Decision, ds: m.Dataset) -> list[dict]:
+    """Checks recomputed now (data may have changed since the card was saved)."""
+    plan = (d.snapshot or {}).get("plan") or {}
+    return decision_checks.evaluate(session, d.org_id, ds, d.topic_id, d.action, d.analysis_ids, d.plan_analysis_id,
+                                    plan.get("preset"), [(s.get("edition") or {}).get("code") for s in (d.snapshot or {}).get("sources", [])])
+
+
+def check_draft(session: Session, p: Principal, body: DecisionCreate) -> dict:
+    """Coherence of a draft before it is saved (shown live on the decision screen)."""
+    ds = an.get_dataset(session, p.org_id, body.dataset_id)
+    editions = []
+    for sid in body.source_ids:
+        try:
+            editions.append((source_payload(session, p.org_id, sid).get("edition") or {}).get("code"))
+        except ApiError:
+            editions.append(None)
+    issues = decision_checks.evaluate(session, p.org_id, ds, body.topic_id, body.action, body.analysis_ids,
+                                      body.plan_analysis_id, body.plan_preset, editions)
+    return {"issues": issues, "blocking": bool(decision_checks.blocking(issues))}
 
 
 def decision_payload(session: Session, d: m.Decision) -> dict:
@@ -210,6 +242,7 @@ def decision_payload(session: Session, d: m.Decision) -> dict:
                      "approved_by": users.get(h.approved_by)} for h in history],
         "follow_ups": follow_ups,
         "is_synthetic": ds.is_synthetic,
+        "coherence": coherence_for(session, d, ds) if d.status == "draft" else (d.snapshot or {}).get("coherence", []),
     }
 
 

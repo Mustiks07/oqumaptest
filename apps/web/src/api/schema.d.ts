@@ -450,6 +450,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/decisions/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Decision
+         * @description Coherence of a draft card: plan hours in the action, material vs comparison, stale or missing analyses.
+         */
+        post: operations["check_decision_api_v1_decisions_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/decisions/{decision_id}": {
         parameters: {
             query?: never;
@@ -2219,6 +2239,29 @@ export interface components {
              */
             weekly_hours: number;
         };
+        /** CoherenceIssue */
+        CoherenceIssue: {
+            /** Code */
+            code: string;
+            /** Message Kz */
+            message_kz: string;
+            /** Message Ru */
+            message_ru: string;
+            /**
+             * Params
+             * @default {}
+             */
+            params: {
+                [key: string]: unknown;
+            };
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "critical" | "warning";
+        } & {
+            [key: string]: unknown;
+        };
         /** CommitRequest */
         CommitRequest: {
             /** Batch Id */
@@ -2469,6 +2512,15 @@ export interface components {
              */
             to: string;
         };
+        /** DecisionCheck */
+        DecisionCheck: {
+            /** Blocking */
+            blocking: boolean;
+            /** Issues */
+            issues: components["schemas"]["CoherenceIssue"][];
+        } & {
+            [key: string]: unknown;
+        };
         /** DecisionCreate */
         DecisionCreate: {
             /** Action */
@@ -2518,6 +2570,11 @@ export interface components {
             approved_at: string | null;
             /** Approved By */
             approved_by: string | null;
+            /**
+             * Coherence
+             * @default []
+             */
+            coherence: components["schemas"]["CoherenceIssue"][];
             /** Created At */
             created_at: string;
             /** Created By */
@@ -4985,6 +5042,10 @@ export interface components {
              * @default ru
              */
             lang: string;
+            /** Plan Analysis Id */
+            plan_analysis_id?: string | null;
+            /** Plan Preset */
+            plan_preset?: string | null;
             /** Topic Analysis Id */
             topic_analysis_id: string;
         };
@@ -7703,6 +7764,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DecisionOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    check_decision_api_v1_decisions_check_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionCheck"];
                 };
             };
             /** @description Bad Request */

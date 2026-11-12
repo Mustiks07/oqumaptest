@@ -85,12 +85,11 @@ def build(session: Session, org_id: str, dataset_id: str, topic_id: str, f: an.F
         if row is not None:
             eds = summ["result"]["editions"]
             fav = eds.get(row["favoured"]) if row["favoured"] else None
-            other = eds["a" if row["favoured"] == "b" else "b"] if fav else None
             favoured_code = fav["code"] if fav else None
             diff = row["adjusted_difference"]
             pp = None if diff is None else f"{100 * abs(diff):.1f}".replace(".", ",")
             if fav:
-                label_ru = f"{fav['name_ru']} сильнее в этой теме: +{pp} п.п. к «{other['name_ru']}» после учёта входного уровня"
+                label_ru = f"{fav['name_ru']} сильнее в этой теме: +{pp} п.п. после учёта входного уровня"
                 label_kz = f"{fav['name_kz']} бұл тақырыпта күштірек: кіріс деңгейін ескергенде +{pp} п.т."
                 status = "measured"
             elif row["status"] == "not_comparable":
