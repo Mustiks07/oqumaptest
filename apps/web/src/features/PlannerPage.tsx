@@ -4,12 +4,15 @@ import type { Envelope, PlanResult, PlanScenario, TopicInput } from "../api/type
 import { useI18n } from "../i18n/I18n";
 import type { DictKey } from "../i18n/dict";
 import { useAppState } from "../state/AppState";
-import { Alert, Badge, Button, Card, ErrorState, Field, Loading, QueryView, StaleBanner, StatusBadge, Tabs } from "../ui";
+import { Alert, Button, Card, Disclosure, ErrorState, Field, Loading, QueryView, StaleBanner, StatusBadge, Tabs } from "../ui";
 import { HoursChart } from "../ui/charts";
 import { pct } from "../ui/format";
 import { NeedDataset } from "./OverviewPage";
 
-type Row = TopicInput & { status?: string | null; score?: number | null; basis?: string; diag?: boolean };
+type Row = TopicInput & {
+  status?: string | null; score?: number | null; basis?: string; diag?: boolean;
+  protected?: boolean; protectionReason?: string | null;
+};
 const PRESETS = ["balanced", "minimal_changes", "focus_problem_topics"];
 
 export function PlannerPage() {
@@ -30,6 +33,7 @@ export function PlannerPage() {
         topic_id: tp.topic_id, code: tp.code, title: pick(tp as unknown as Record<string, unknown>, "title"), current_hours: tp.current_hours,
         priority: tp.priority, min_hours: tp.min_hours, max_hours: tp.max_hours, fixed: false, elapsed_hours: tp.elapsed_hours,
         max_change: null, status: tp.topic_status, score: tp.score, basis: tp.priority_basis, diag: tp.recommend_diagnostic,
+        protected: tp.protected_from_reduction, protectionReason: lang === "kz" ? tp.protection_reason_kz : tp.protection_reason_ru,
       })));
       setBudget(ctx.data.budget);
     } else {
@@ -47,7 +51,7 @@ export function PlannerPage() {
   const run = () =>
     solve.mutate({
       dataset_id: st.datasetId!, plan_id: mode === "current" ? ctx.data?.plan?.id ?? null : null, filters: st.filters,
-      topics: rows.map(({ status: _s, score: _sc, basis: _b, diag: _d, ...r }) => r), budget, change_penalty: penalty,
+      topics: rows.map(({ status: _s, score: _sc, basis: _b, diag: _d, protected: _p, protectionReason: _pr, ...r }) => r), budget, change_penalty: penalty,
       presets, time_limit_seconds: 5, source_analysis_id: ctx.data?.source_analysis_id ?? null,
     }, { onSuccess: () => { if (mode === "current") st.markStep("plan"); } });
   const env = solve.data as Envelope<PlanResult> | undefined;
@@ -78,7 +82,7 @@ export function PlannerPage() {
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={r.code}>
-                      <td><strong>{r.code}</strong> <span className="small">{r.title}</span>{r.diag && <div className="xs" style={{ color: "var(--color-warn)" }}>⚠ {t("planner.diagnostic")}</div>}</td>
+                      <td><strong>{r.title}</strong>{r.diag && <div className="xs" style={{ color: "var(--color-warn)" }}>⚠ {t("planner.diagnostic")}</div>}{r.protected && <div className="xs" style={{ color: "var(--color-primary)" }}>◆ {r.protectionReason ?? t("planner.protected")}</div>}</td>
                       <td className="num"><input aria-label={`${r.code} ${t("planner.current")}`} className="input input-num" type="number" min={0} value={r.current_hours} onChange={(e) => upd(i, { current_hours: intOrNull(e.target.value) ?? 0 })} /></td>
                       <td className="num"><input aria-label={`${r.code} ${t("planner.elapsed")}`} className="input input-num" type="number" min={0} value={r.elapsed_hours ?? 0} onChange={(e) => upd(i, { elapsed_hours: intOrNull(e.target.value) ?? 0 })} /></td>
                       <td className="num"><input aria-label={`${r.code} ${t("planner.min")}`} className="input input-num" type="number" min={0} value={r.min_hours ?? ""} onChange={(e) => upd(i, { min_hours: intOrNull(e.target.value) })} data-testid={`min-${r.code}`} /></td>
@@ -107,7 +111,9 @@ export function PlannerPage() {
               </fieldset>
               <Button variant="primary" onClick={run} disabled={solve.isPending || presets.length === 0} data-testid="solve">{t("planner.solve")}</Button>
             </div>
-            <p className="xs muted" style={{ marginTop: 8 }}>{c.priority_rule} · {t("planner.weights_version")}: {c.weights_version}</p>
+            <Disclosure summary={t("planner.how_priority")}>
+              <p className="xs muted">{c.priority_rule} · {t("planner.weights_version")}: {c.weights_version}</p>
+            </Disclosure>
           </Card>
         )}
       </QueryView>
@@ -130,27 +136,41 @@ function ScenarioCard({ sc, analysisId, canUse }: { sc: PlanScenario; analysisId
   const { t, lang } = useI18n();
   const st = useAppState();
   const used = st.draft.planAnalysisId === analysisId && st.draft.planPreset === sc.preset;
+  const verdict = (lang === "kz" ? sc.verdict_kz : sc.verdict_ru)
+    ?? (lang === "kz" ? sc.status_message_kz : sc.status_message_ru)
+    ?? t("planner.needs_attention");
   return (
     <Card title={t(`planner.preset.${sc.preset}` as DictKey)}>
       <div className="stack" data-testid={`scenario-${sc.preset}`}>
-        <div className="row"><Badge tone={sc.status === "optimal" ? "ok" : sc.status === "feasible" ? "info" : "danger"}>{sc.status}</Badge><span className="small">{lang === "kz" ? sc.status_message_kz : sc.status_message_ru}</span></div>
+        <Alert tone={sc.human_status === "ready" ? "ok" : "warn"}>
+          <strong>{verdict}</strong>
+        </Alert>
         {sc.changes && (
           <>
             <HoursChart title={t("planner.result")} labels={[t("planner.before"), t("planner.after")]} rows={sc.changes.map((ch) => ({ code: ch.code, before: ch.before, after: ch.after }))} />
-            <div className="table-wrap" tabIndex={0}>
-              <table className="table">
-                <thead><tr><th>{t("planner.topic")}</th><th className="num">{t("planner.before")}</th><th className="num">{t("planner.after")}</th><th className="num">{t("planner.delta")}</th></tr></thead>
-                <tbody>
-                  {sc.changes.map((ch) => (
-                    <tr key={ch.code}><td>{ch.code}</td><td className="num">{ch.before}</td><td className="num"><strong>{ch.after}</strong></td>
-                      <td className={`num ${ch.delta > 0 ? "diff-pos" : ch.delta < 0 ? "diff-neg" : ""}`}>{ch.delta > 0 ? `+${ch.delta}` : ch.delta === 0 ? "0" : `−${Math.abs(ch.delta)}`}</td></tr>
-                  ))}
-                  <tr><td><strong>{t("planner.total")}</strong></td><td className="num">{sc.total_before}</td><td className="num"><strong>{sc.total_after}</strong></td><td /></tr>
-                </tbody>
-              </table>
+            <div className="plan-change-list">
+              {sc.changes.filter((change) => change.delta !== 0).map((change) => (
+                <article className="plan-change" key={change.code}>
+                  <div className="plan-change-head">
+                    <strong>{change.title}</strong>
+                    <span className={`plan-delta ${change.delta > 0 ? "diff-pos" : "diff-neg"}`}>{change.before} → {change.after} ч ({change.delta > 0 ? `+${change.delta}` : `−${Math.abs(change.delta)}`})</span>
+                  </div>
+                  <p>{lang === "kz" ? change.reason_kz : change.reason_ru}</p>
+                  {change.delta < 0 && (lang === "kz" ? change.donor_reason_kz : change.donor_reason_ru) && (
+                    <p className="xs muted"><strong>{t("planner.why_donor")}:</strong> {lang === "kz" ? change.donor_reason_kz : change.donor_reason_ru}</p>
+                  )}
+                </article>
+              ))}
             </div>
             {sc.validation?.valid && <Alert tone="ok">{t("planner.valid")}</Alert>}
-            <p className="xs muted">{t("planner.objective")}: {String(sc.objective?.formula ?? "")}; λ={String(sc.objective?.change_penalty ?? "")}, r={String(sc.objective?.diminishing_rate ?? "")} · {t("planner.time")}: {String((sc.solver as { wall_time_seconds?: number })?.wall_time_seconds ?? "")} s</p>
+            <Disclosure summary={t("planner.how_calculated")}>
+              <div className="stack xs muted">
+                <span>{t("planner.technical_status")}: {sc.status}</span>
+                <span>{lang === "kz" ? sc.status_message_kz : sc.status_message_ru}</span>
+                <span>{t("planner.objective")}: {String(sc.objective?.formula ?? "")}; λ={String(sc.objective?.change_penalty ?? "")}, r={String(sc.objective?.diminishing_rate ?? "")}</span>
+                <span>{t("planner.time")}: {String((sc.solver as { wall_time_seconds?: number })?.wall_time_seconds ?? "")} s</span>
+              </div>
+            </Disclosure>
             {canUse && (
               <Button variant={used ? "primary" : "default"} aria-pressed={used} data-testid={`use-plan-${sc.preset}`} onClick={() => st.updateDraft({ planAnalysisId: analysisId, planPreset: sc.preset })}>
                 {used ? `✓ ${t("compare.used")}` : t("planner.use_in_decision")}
