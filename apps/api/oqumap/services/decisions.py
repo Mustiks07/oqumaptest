@@ -26,6 +26,10 @@ STANDARD_LIMITS_RU = [
     "Данные наблюдательные: показатели описывают связь при указанных условиях и не доказывают причинного влияния.",
     "Распределение часов — результат планирования приоритетов при ограничениях, а не прогноз роста баллов.",
 ]
+STANDARD_LIMITS_KZ = [
+    "Деректер бақылау сипатында: көрсеткіштер байланысты сипаттайды және себептік әсерді дәлелдемейді.",
+    "Сағатты бөлу — шектеулер аясында басымдықтарды жоспарлау нәтижесі, ұпай өсуінің болжамы емес.",
+]
 
 
 class DecisionCreate(BaseModel):
@@ -78,16 +82,17 @@ def create(session: Session, p: Principal, body: DecisionCreate) -> dict:
         "analyses": [{"analysis_id": r.id, "kind": r.kind, "dataset_version": r.dataset_version,
                       "method_version": r.method_version, "computed_at": r.created_at.isoformat()} for r in runs],
         "limitations": list(STANDARD_LIMITS_RU),
+        "limitations_kz": list(STANDARD_LIMITS_KZ),
     }
     for r in runs:
         if r.kind == "topic_evidence":
             res = r.result
             snapshot["topic"] = {
                 "analysis_id": r.id, **res["topic"], "status": res["status"], "summary": res["summary"],
-                "objectives": [{"code": o["code"], "text_ru": o["text_ru"], "status": o["status"],
+                "objectives": [{"code": o["code"], "text_ru": o["text_ru"], "text_kz": o["text_kz"], "status": o["status"],
                                 "mean": (o["score"] or {}).get("mean"), "n_learners": (o["score"] or {}).get("n_learners")}
                                for o in res["objectives"]],
-                "misconceptions": [{k: x[k] for k in ("code", "label_ru", "n_learners", "share_of_learners", "items")}
+                "misconceptions": [{k: x[k] for k in ("code", "label_ru", "label_kz", "n_learners", "share_of_learners", "items")}
                                    for x in res["misconceptions"][:3]],
                 "items": [{"code": it["code"], "stem_ru": it["stem_ru"], "p_correct": it["p_correct"],
                            "n_answered": it["n_answered"], "n_omitted": it["n_omitted"]} for it in res["items"]],
@@ -103,12 +108,16 @@ def create(session: Session, p: Principal, body: DecisionCreate) -> dict:
                 "uncertainty": res["uncertainty"], "reasons": res["reasons"],
             }
             snapshot["limitations"] += [x["message_ru"] for x in res["reasons"] if x["severity"] in ("warn", "fail")]
+            snapshot["limitations_kz"] += [x["message_kz"] for x in res["reasons"] if x["severity"] in ("warn", "fail")]
     if plan_run is not None:
         scen = next((s for s in plan_run.result["scenarios"] if s["preset"] == (body.plan_preset or s["preset"])), None)
         if scen is None or scen["status"] not in ("optimal", "feasible"):
             raise ApiError("plan_not_feasible", "Выбранный сценарий плана не имеет допустимого решения", 422)
+        titles = {t.code: (t.title_ru, t.title_kz) for t in an.load_meta(session, p.org_id, ds.id).topics}
+        changes = [{**ch, "title_ru": titles.get(ch["code"], (ch["title"], ch["title"]))[0],
+                    "title_kz": titles.get(ch["code"], (ch["title"], ch["title"]))[1]} for ch in scen["changes"]]
         snapshot["plan"] = {"analysis_id": plan_run.id, "preset": scen["preset"], "status": scen["status"],
-                            "status_message_ru": scen["status_message_ru"], "changes": scen["changes"],
+                            "status_message_ru": scen["status_message_ru"], "changes": changes,
                             "total_before": scen["total_before"], "total_after": scen["total_after"],
                             "validation": scen["validation"], "objective": scen["objective"],
                             "budget": plan_run.result["budget"], "is_calendar": False}
@@ -126,6 +135,19 @@ def create(session: Session, p: Principal, body: DecisionCreate) -> dict:
         # structured facts behind the draft (hours, donors, chosen material and why) for the report
         if isinstance(g.output, dict) and (g.output.get("hours") or g.output.get("material")):
             snapshot["recommendation"] = {"hours": g.output.get("hours"), "material": g.output.get("material")}
+    # the programme-wide edition verdict (stored analysis; computed once and reused)
+    try:
+        from . import edition_summary as es
+
+        summ = es.for_dataset(session, p.org_id, ds.id, body.filters.model_copy(), p.user_id)
+    except ApiError:
+        summ = None
+    if summ is not None:
+        v = summ["result"]["verdict"]
+        snapshot["edition_summary"] = {"analysis_id": summ["context"]["analysis_id"], "kind": v["kind"],
+                                       "text_ru": v["text_ru"], "text_kz": v["text_kz"]}
+        snapshot["limitations"].append("Сравнение пособий по всем темам разведочное: выбор делается по теме, а не по общему рейтингу.")
+        snapshot["limitations_kz"].append("Барлық тақырып бойынша құралдарды салыстыру барлау сипатында: таңдау жалпы рейтинг бойынша емес, тақырып бойынша жасалады.")
     snapshot["coherence"] = decision_checks.evaluate(
         session, p.org_id, ds, body.topic_id, body.action, body.analysis_ids, body.plan_analysis_id, body.plan_preset,
         [(s.get("edition") or {}).get("code") for s in sources])

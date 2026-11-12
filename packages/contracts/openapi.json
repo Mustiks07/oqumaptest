@@ -14417,6 +14417,26 @@
             }
           },
           {
+            "in": "query",
+            "name": "lang",
+            "required": false,
+            "schema": {
+              "default": "ru",
+              "title": "Lang",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "appendix",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Appendix",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,

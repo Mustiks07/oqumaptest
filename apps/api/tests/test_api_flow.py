@@ -138,9 +138,20 @@ def test_full_methodist_path(fresh_client):
     pdf = c.get(f"/api/v1/decisions/{ap['id']}/report", params={"format": "pdf"}, headers=H)
     assert pdf.headers["content-type"] == "application/pdf" and pdf.content[:5] == b"%PDF-"
     text = "".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf.content)).pages)
-    assert "СИНТЕТИЧЕСКИЕ ДАННЫЕ" in text and "T3" in text
-    pct = f"{100 * r['adjusted']['difference']:+.1f}".replace(".", ",")
+    # a management document: topic named in words, numbers from the snapshot, no internal codes or enums
+    assert "Демонстрационные данные" in text and "Сложение и вычитание дробей" in text
+    pct = f"{100 * abs(r['adjusted']['difference']):.1f}".replace(".", ",")
     assert pct in text
+    for token in ("first", "as_incorrect", "confirmed_only", "pooled", "maximize", "DEMO-M6", "EDA", "EDB", ap["id"][:8]):
+        assert token not in text, token
+    pages = PdfReader(io.BytesIO(pdf.content)).pages
+    assert len(pages[-1].extract_text()) > 300  # no almost empty last page
+    kz = c.get(f"/api/v1/decisions/{ap['id']}/report", params={"format": "pdf", "lang": "kz"}, headers=H)
+    kz_text = "".join(p.extract_text() for p in PdfReader(io.BytesIO(kz.content)).pages)
+    assert "Нені өзгертуді ұсынамыз" in kz_text and "Деректердің шектеулері" in kz_text
+    tech = c.get(f"/api/v1/decisions/{ap['id']}/report", params={"format": "pdf", "appendix": "true"}, headers=H)
+    tech_text = "".join(p.extract_text() for p in PdfReader(io.BytesIO(tech.content)).pages)
+    assert "Техническое приложение" in tech_text and "Техническое приложение" not in text
     x = c.get(f"/api/v1/decisions/{ap['id']}/report", params={"format": "xlsx"}, headers=H)
     wb = load_workbook(io.BytesIO(x.content))
     rows = list(wb["results"].iter_rows(values_only=True))

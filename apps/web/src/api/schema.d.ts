@@ -8148,6 +8148,8 @@ export interface operations {
         parameters: {
             query?: {
                 format?: string;
+                lang?: string;
+                appendix?: boolean;
             };
             header?: {
                 authorization?: string | null;

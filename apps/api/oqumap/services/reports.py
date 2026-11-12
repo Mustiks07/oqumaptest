@@ -12,8 +12,6 @@ import csv
 import io
 from pathlib import Path
 
-from .messages import COMPARABILITY, INFERENCE
-
 FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
@@ -142,7 +140,76 @@ def to_xlsx(dec: dict) -> bytes:
     return buf.getvalue()
 
 
-def to_pdf(dec: dict) -> bytes:
+T = {
+    "title": ("Решение по теме «{topic}»", "«{topic}» тақырыбы бойынша шешім"),
+    "title_plain": ("Методическое решение", "Әдістемелік шешім"),
+    "status_line": ("Версия {v} · {status} · {date}", "{v}-нұсқа · {status} · {date}"),
+    "synthetic": ("Демонстрационные данные: ученики, классы, школы и пособия вымышлены.",
+                  "Демонстрациялық деректер: оқушылар, сыныптар, мектептер мен құралдар ойдан алынған."),
+    "summary": ("Краткий вывод", "Қысқаша қорытынды"),
+    "found": ("Что обнаружено", "Не анықталды"),
+    "change": ("Что рекомендуем изменить", "Нені өзгертуді ұсынамыз"),
+    "why": ("Почему именно это решение", "Неге дәл осы шешім"),
+    "hours": ("Из каких тем перенесены часы", "Сағаттар қай тақырыптардан ауыстырылды"),
+    "materials": ("Какие материалы использовать", "Қандай материалдарды пайдалану керек"),
+    "check": ("Как и когда проверим результат", "Нәтижені қалай және қашан тексереміз"),
+    "limits": ("Ограничения данных", "Деректердің шектеулері"),
+    "appendix": ("Техническое приложение", "Техникалық қосымша"),
+    "col_topic": ("Тема", "Тақырып"), "col_result": ("Средний результат", "Орташа нәтиже"),
+    "col_ci": ("95% интервал", "95% интервал"), "col_n": ("Учеников / классов", "Оқушы / сынып"),
+    "col_goal": ("Цель обучения", "Оқу мақсаты"), "col_error": ("Возможная ошибка (гипотеза)", "Ықтимал қате (гипотеза)"),
+    "col_share": ("Доля учеников", "Оқушылар үлесі"), "col_before": ("Было, ч", "Болды, сағ"), "col_after": ("Стало, ч", "Болады, сағ"),
+    "col_delta": ("Изменение", "Өзгеріс"), "col_reason": ("Почему", "Неге"), "col_book": ("Пособие", "Құрал"),
+    "col_place": ("Место", "Орны"), "col_fragment": ("Фрагмент", "Үзінді"),
+    "budget_same": ("Общий объём часов не меняется: {total} ч.", "Сағаттардың жалпы көлемі өзгермейді: {total} сағ."),
+    "plan_checked": ("План проверен независимым валидатором ограничений.", "Жоспар шектеулердің тәуелсіз валидаторымен тексерілді."),
+    "no_plan": ("План часов к решению не прикреплён.", "Шешімге сағат жоспары тіркелмеген."),
+    "date": ("Дата повторной проверки", "Қайта тексеру күні"), "criterion": ("Критерий", "Өлшем"),
+    "responsible": ("Ответственный", "Жауапты"), "target": ("Для кого", "Кімге"),
+    "approved": ("Утверждено", "Бекітілді"), "followup": ("Повторная проверка", "Қайта тексеру"),
+    "dynamics_note": ("наблюдаемая динамика, а не оценка воздействия", "бақыланатын динамика, әсерді бағалау емес"),
+    "page": ("стр.", "бет"), "page_short": ("с.", "б."),
+    "footer": ("OquMap · решение сформировано из сохранённых анализов", "OquMap · шешім сақталған талдаулардан жасалды"),
+    "raw_vs_adj": ("Без поправки на входной уровень: {a} — {ra}, {b} — {rb}. С учётом входного уровня учеников: {a} — {aa}, {b} — {ab}",
+                   "Кіріс деңгейін ескермегенде: {a} — {ra}, {b} — {rb}. Кіріс деңгейін ескергенде: {a} — {aa}, {b} — {ab}"),
+    "lead": ("; {lead} впереди на {d} (95% интервал преимущества от {lo} до {hi}).", "; {lead} {d} алда (95% интервал: {lo} – {hi})."),
+    "no_diff": ("; различие данными не подтверждается.", "; айырма расталмайды."),
+    "flip": ("Направление различия изменилось после учёта входного уровня — сырой рейтинг здесь вводит в заблуждение.",
+             "Кіріс деңгейін ескергенде айырма бағыты өзгерді — шикі рейтинг адастырады."),
+    "status_draft": ("черновик", "жоба"), "status_approved": ("утверждено", "бекітілді"), "status_superseded": ("заменено", "ауыстырылды"),
+    "appendix_note": ("Для проверки расчёта: версии данных и методов, правила подсчёта.", "Есептеуді тексеру үшін: деректер мен әдістер нұсқалары."),
+    "rules": ("Правила подсчёта", "Есептеу ережелері"), "analyses": ("Сохранённые анализы", "Сақталған талдаулар"),
+}
+RULES_HUMAN = {
+    "attempt_rule": {"first": ("первая попытка ученика", "оқушының бірінші әрекеті"), "last": ("последняя попытка ученика", "оқушының соңғы әрекеті")},
+    "omitted_policy": {"as_incorrect": ("пропуск считается неверным ответом", "өткізіп алу қате жауап болып саналады"),
+                       "exclude": ("пропуск исключается из расчёта", "өткізіп алу есептен шығарылады")},
+    "aggregation": {"learner": ("среднее по ученикам", "оқушылар бойынша орташа"), "class": ("среднее по классам", "сыныптар бойынша орташа")},
+    "mapping_status": {"confirmed_only": ("только подтверждённая разметка заданий", "тек расталған белгілеу"),
+                       "include_proposed": ("включая предложенную разметку", "ұсынылған белгілеуді қоса")},
+}
+
+
+def _t(key: str, lang: str, **kw) -> str:
+    ru, kz = T[key]
+    return (kz if lang == "kz" else ru).format(**kw)
+
+
+def _ppa(x, lang="ru") -> str:
+    return "—" if x is None else f"{100 * abs(x):.1f}".replace(".", ",") + (" п.т." if lang == "kz" else " п.п.")
+
+
+def _plural_ru(n: int, forms: tuple[str, str, str]) -> str:
+    n = abs(int(n))
+    if n % 10 == 1 and n % 100 != 11:
+        return forms[0]
+    return forms[1] if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14) else forms[2]
+
+
+def to_pdf(dec: dict, lang: str = "ru", appendix: bool = False) -> bytes:
+    """Management document: conclusion first, then what was found, what changes, why, hours, materials, how it is
+    checked and the limits. Internal codes, filter enums, solver formulas and IDs are kept out of the main part; they
+    appear only in the optional technical appendix."""
     from xml.sax.saxutils import escape
 
     from reportlab.lib import colors
@@ -152,153 +219,200 @@ def to_pdf(dec: dict) -> bytes:
     from reportlab.lib.units import mm
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import (
+        KeepTogether,
+        PageBreak,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
 
+    from .labels import edition_name
+
+    lang = "kz" if lang == "kz" else "ru"
+    li = 1 if lang == "kz" else 0
     try:
         pdfmetrics.getFont("OquSans")
     except KeyError:
         pdfmetrics.registerFont(TTFont("OquSans", str(FONT_DIR / "DejaVuSans.ttf")))
         pdfmetrics.registerFont(TTFont("OquSans-Bold", str(FONT_DIR / "DejaVuSans-Bold.ttf")))
     s = dec["snapshot"]
-    base = ParagraphStyle("base", fontName="OquSans", fontSize=9.5, leading=13, alignment=TA_LEFT)
-    small = ParagraphStyle("small", parent=base, fontSize=8, leading=10.5, textColor=colors.HexColor("#4a5568"))
-    h1 = ParagraphStyle("h1", parent=base, fontName="OquSans-Bold", fontSize=16, leading=20, spaceAfter=6)
-    h2 = ParagraphStyle("h2", parent=base, fontName="OquSans-Bold", fontSize=11.5, leading=15, spaceBefore=10, spaceAfter=4,
+    base = ParagraphStyle("base", fontName="OquSans", fontSize=9.5, leading=13, alignment=TA_LEFT, allowWidows=0, allowOrphans=0)
+    small = ParagraphStyle("small", parent=base, fontSize=8.5, leading=11.5, textColor=colors.HexColor("#4a5568"))
+    cell = ParagraphStyle("cell", parent=base, fontSize=8.5, leading=11)
+    h1 = ParagraphStyle("h1", parent=base, fontName="OquSans-Bold", fontSize=17, leading=22, spaceAfter=4)
+    h2 = ParagraphStyle("h2", parent=base, fontName="OquSans-Bold", fontSize=11.5, leading=15, spaceBefore=9, spaceAfter=4,
                         textColor=colors.HexColor("#1a365d"))
-    warn = ParagraphStyle("warn", parent=base, backColor=colors.HexColor("#fff4e5"), borderPadding=5,
-                          textColor=colors.HexColor("#7b341e"))
+    lead_style = ParagraphStyle("lead", parent=base, fontSize=11, leading=15.5, backColor=colors.HexColor("#eef2ff"),
+                                borderPadding=8, borderColor=colors.HexColor("#c3cdf5"), borderWidth=0.6)
+    note = ParagraphStyle("note", parent=small, backColor=colors.HexColor("#fff7e6"), borderPadding=4, textColor=colors.HexColor("#7b341e"))
 
     def P(text, style=base):
         return Paragraph(escape(str(text)).replace("\n", "<br/>"), style)
 
-    def table(data, widths=None):
-        t = Table([[P(c, small) if not isinstance(c, Paragraph) else c for c in row] for row in data], colWidths=widths,
-                  repeatRows=1)
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#edf2f7")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e0")),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
+    def table(data, widths, header=True):
+        t = Table([[P(c, cell) if not isinstance(c, Paragraph) else c for c in row] for row in data], colWidths=widths,
+                  repeatRows=1 if header else 0)
+        style = [("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e0")), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                 ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]
+        if header:
+            style.append(("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#edf2f7")))
+        t.setStyle(TableStyle(style))
         return t
 
-    story = []
-    story.append(P("Карточка методического решения", h1))
-    story.append(P(f"Версия {dec['version']} · статус: {_status_ru(dec['status'])} · ID {dec['id']}", small))
-    if s["dataset"]["is_synthetic"]:
-        story.append(Spacer(1, 4))
-        story.append(P("СИНТЕТИЧЕСКИЕ ДАННЫЕ. Демонстрационный набор: ученики, классы, школы и пособия вымышлены; "
-                       "показатели не описывают реальные школы и не являются результатом пилота.", warn))
-    story.append(Spacer(1, 6))
-    story.append(table([
-        ["Набор данных", s["dataset"]["name_ru"]],
-        ["Версия данных", str(s["dataset"]["version"])],
-        ["Целевая группа", dec["target_group"]],
-        ["Фильтры", _filters_text(s["filters"])],
-        ["Ответственный", dec["responsible"]],
-        ["Повторная проверка", (dec["follow_up_date"] or "—") + (f" · критерий: {dec['follow_up_criterion']}" if dec["follow_up_criterion"] else "")],
-        ["Утверждение", (f"{dec['approved_by']} · {dec['approved_at'][:16].replace('T', ' ')} UTC" if dec["approved_at"] else "не утверждено")],
-    ], [42 * mm, 128 * mm]))
+    def section(title_key, *flow):
+        """Heading kept together with the start of its content (no orphan headings at the bottom of a page)."""
+        flow = [f for f in flow if f is not None]
+        if not flow:
+            return []
+        return [KeepTogether([P(_t(title_key, lang), h2), flow[0]]), *flow[1:]]
 
-    story.append(P("Проблема", h2))
-    story.append(P(dec["problem"]))
-    t = s.get("topic")
-    if t:
-        sm = t.get("summary") or {}
-        story.append(P("Показатели темы", h2))
-        ci = f"{pct(sm.get('ci_low'))} – {pct(sm.get('ci_high'))}" if sm.get("ci_low") is not None else (sm.get("ci_unavailable_reason") or "—")
-        story.append(table([
-            ["Тема", "Средняя доля баллов", "95% интервал", "Учеников", "Классов", "Школ"],
-            [f"{t['code']} {t['title_ru']}", pct(sm.get("mean")), ci, sm.get("n_learners"), sm.get("n_classes"), sm.get("n_schools")],
-        ], [52 * mm, 26 * mm, 30 * mm, 22 * mm, 20 * mm, 20 * mm]))
-        story.append(Spacer(1, 4))
-        story.append(table([["Цель", "Формулировка", "Доля баллов", "Статус"]] +
-                           [[o["code"], o["text_ru"], pct(o["mean"]), _objective_status(o["status"])] for o in t["objectives"]],
-                           [28 * mm, 92 * mm, 24 * mm, 26 * mm]))
-        if t["misconceptions"]:
-            story.append(Spacer(1, 4))
-            story.append(table([["Возможная ошибка (гипотеза)", "Учеников (≥1 выбор)", "Доля учеников", "Задания"]] +
-                               [[mc["label_ru"], mc["n_learners"], pct(mc["share_of_learners"]), ", ".join(mc["items"])]
-                                for mc in t["misconceptions"]], [96 * mm, 20 * mm, 20 * mm, 34 * mm]))
-        ex = t["exclusions"]
-        story.append(P(f"Исключения: отсутствовали на проверке — {ex['absent_sittings']}; пропущенных ответов по теме — "
-                       f"{ex['omitted_responses']}; учеников с повторными попытками — {ex['learners_with_repeat_attempts']}; "
-                       f"отклонённых строк импорта — {ex['rejected_import_rows']}. Правило попыток: {t['rules']['attempt_rule']}; "
-                       f"пропуск: {t['rules']['omitted_policy']}; агрегация: {t['rules']['aggregation']}.", small))
-    c = s.get("comparison")
-    if c:
-        ea, eb = c["editions"]["a"], c["editions"]["b"]
-        story.append(P("Сравнение изданий на сопоставимых группах", h2))
-        story.append(P(f"Статус: {COMPARABILITY[c['status']][0]}. Уровень вывода: {INFERENCE[c['inference_level']][0]}. "
-                       f"Метод: стандартизация по входному уровню ({c['adjusted']['strata_scheme']}, веса: {c['adjusted']['weight_mode']}); "
-                       f"интервал — кластерный бутстрэп по единице «{c['uncertainty']['cluster_unit']}».", base))
-        ci = c["uncertainty"]["adjusted_difference_ci"]
-        story.append(table([
-            ["", ea["code"], eb["code"], f"Разница {eb['code']} − {ea['code']}"],
-            ["Исходная доля баллов", pct(c["raw"]["a"]["mean"]), pct(c["raw"]["b"]["mean"]), pp(c["raw"]["difference"])],
-            ["Скорректированная", pct(c["adjusted"]["a"]), pct(c["adjusted"]["b"]), pp(c["adjusted"]["difference"])],
-            ["95% интервал разницы", "", "", f"{pp(ci['low'])} … {pp(ci['high'])}" if ci else (c["uncertainty"].get("unavailable_reason") or "—")],
-            ["Учеников / классов / школ", f"{c['raw']['a']['n_learners']} / {c['raw']['a']['n_classes']} / {c['raw']['a']['n_schools']}",
-             f"{c['raw']['b']['n_learners']} / {c['raw']['b']['n_classes']} / {c['raw']['b']['n_schools']}", ""],
-        ], [52 * mm, 34 * mm, 34 * mm, 50 * mm]))
-        story.append(Spacer(1, 4))
-        story.append(table([["Входной уровень", "Вес", f"{ea['code']}: n / доля", f"{eb['code']}: n / доля"]] +
-                           [[st["stratum"], pct(st["weight"], 0) if st["weight"] is not None else "—",
-                             f"{st['n_a']} / {pct(st['mean_a'])}", f"{st['n_b']} / {pct(st['mean_b'])}"] for st in c["adjusted"]["strata"]],
-                           [44 * mm, 24 * mm, 51 * mm, 51 * mm]))
-    pl = s.get("plan")
-    if pl:
-        story.append(P("Изменение часов (план по темам, не календарное расписание)", h2))
-        story.append(P(f"Статус решателя: {pl['status_message_ru']}. Сценарий: {pl['preset']}. Сумма часов: "
-                       f"{pl['total_before']} → {pl['total_after']} (бюджет {pl['budget']}). Независимая проверка ограничений: "
-                       f"{'пройдена' if pl['validation']['valid'] else 'НЕ пройдена'}.", base))
-        story.append(table([["Тема", "Было", "Стало", "Изменение", "Приоритет"]] +
-                           [[f"{ch['code']} {ch['title']}".strip(), ch["before"], ch["after"], f"{ch['delta']:+d}", f"{ch['priority']:.2f}"]
-                            for ch in pl["changes"]], [80 * mm, 20 * mm, 20 * mm, 25 * mm, 25 * mm]))
-        story.append(P(f"Целевая функция: {pl['objective']['formula']}; λ = {pl['objective']['change_penalty']}, r = "
-                       f"{pl['objective']['diminishing_rate']}. Это распределение педагогического приоритета, не прогноз баллов.", small))
-    story.append(P("Гипотеза", h2))
-    story.append(P(dec["hypothesis"]))
-    story.append(P("Действие", h2))
-    story.append(P(dec["action"]))
-    if s.get("sources"):
-        story.append(P("Источники", h2))
-        story.append(table([["Издание / документ", "Место", "Фрагмент"]] +
-                           [[((src.get("edition") or {}).get("title") or src["document_filename"]) + f" (v{src['document_version']})",
-                             (f"с. {src['page_printed']} (физ. {src['page_physical']})" if src["page_printed"] else
-                              (f"физ. с. {src['page_physical']}" if src["page_physical"] else f"якорь {src['anchor']}")),
-                             src["text"][:400]] for src in s["sources"]], [48 * mm, 30 * mm, 92 * mm]))
-    if dec.get("follow_ups"):
-        story.append(P("Повторная проверка", h2))
-        for fu in dec["follow_ups"]:
-            r = fu["result"] or {}
-            tg = r.get("target") or {}
-            ci = tg.get("ci")
-            story.append(P(f"Статус: {fu['status_label_ru']}. До: {pct((tg.get('before') or {}).get('adjusted'))}, после: "
-                           f"{pct((tg.get('after') or {}).get('adjusted'))} (стандартизовано); изменение {pp(tg.get('adjusted_change'))}"
-                           + (f", 95% интервал {pp(ci['low'])} … {pp(ci['high'])}" if ci else "") + ".", base))
-            if r.get("comparison_group"):
-                cg = r["comparison_group"]
-                story.append(P(f"Группа сравнения: изменение {pp(cg.get('adjusted_change'))}. Разница изменений "
-                               f"{pp(r.get('difference_in_changes'))} — описательно.", small))
-            story.append(P(r.get("note_ru", ""), small))
-    story.append(P("Ограничения вывода", h2))
-    for lim in dict.fromkeys(s.get("limitations", [])):
-        story.append(P("• " + lim, base))
-    story.append(Spacer(1, 6))
-    story.append(P("Анализы: " + "; ".join(f"{a['kind']} {a['analysis_id'][:8]} (данные v{a['dataset_version']}, {a['method_version']})"
-                                           for a in s["analyses"]), small))
+    topic = s.get("topic") or {}
+    title = topic.get(f"title_{lang}") or topic.get("title_ru")
+    rec = s.get("recommendation") or {}
+    hours = rec.get("hours")
+    material = rec.get("material") or {}
+    plan = s.get("plan")
+    comp = s.get("comparison")
+    width = A4[0] - 36 * mm
+
+    story = [P(_t("title", lang, topic=title) if title else _t("title_plain", lang), h1)]
+    status = _t(f"status_{dec['status']}", lang) if f"status_{dec['status']}" in T else dec["status"]
+    story.append(P(_t("status_line", lang, v=dec["version"], status=status, date=dec["created_at"][:10]), small))
+    if s["dataset"]["is_synthetic"]:
+        story += [Spacer(1, 3), P(_t("synthetic", lang), note)]
+    story.append(Spacer(1, 8))
+
+    # 1) short conclusion
+    first_action = dec["action"].split(". ")[0].rstrip(".") + "."
+    concl = [first_action]
+    if material.get(f"why_{lang}"):
+        concl.append(material[f"why_{lang}"])
+    if dec.get("follow_up_date"):
+        concl.append(f"{_t('date', lang)}: {dec['follow_up_date']}.")
+    story.append(P(" ".join(concl), lead_style))
+
+    # 2) what was found
+    sm = topic.get("summary") or {}
+    found = [P(dec["problem"])]
+    if sm.get("mean") is not None:
+        ci = f"{pct(sm.get('ci_low'))} – {pct(sm.get('ci_high'))}" if sm.get("ci_low") is not None else "—"
+        found += [Spacer(1, 5), table([[_t("col_topic", lang), _t("col_result", lang), _t("col_ci", lang), _t("col_n", lang)],
+                                       [title, pct(sm.get("mean")), ci, f"{sm.get('n_learners')} / {sm.get('n_classes')}"]],
+                                      [width * 0.43, width * 0.19, width * 0.2, width * 0.18])]
+    objs = [o for o in topic.get("objectives", []) if o.get("mean") is not None]
+    if objs:
+        found += [Spacer(1, 5), table([[_t("col_goal", lang), _t("col_result", lang)]] +
+                                      [[o.get(f"text_{lang}") or o["text_ru"], pct(o["mean"])] for o in sorted(objs, key=lambda o: o["mean"])],
+                                      [width * 0.78, width * 0.22])]
+    mcs = topic.get("misconceptions") or []
+    if mcs:
+        found += [Spacer(1, 5), table([[_t("col_error", lang), _t("col_share", lang)]] +
+                                      [[mc.get(f"label_{lang}") or mc["label_ru"], pct(mc["share_of_learners"])] for mc in mcs],
+                                      [width * 0.78, width * 0.22])]
+    story += section("found", *found)
+
+    # 3) what changes (the full action text; the conclusion above is its first sentence)
+    story += section("change", P(dec["action"]))
+
+    # 4) why
+    why = [P(dec["hypothesis"])]  # the reason for the hours themselves is in the hours table below
+    if comp and comp["adjusted"].get("difference") is not None:
+        ea, eb = comp["editions"]["a"], comp["editions"]["b"]
+        na = ea.get(f"name_{lang}") or edition_name(ea.get("title"), ea["code"], lang)
+        nb = eb.get(f"name_{lang}") or edition_name(eb.get("title"), eb["code"], lang)
+        d = comp["adjusted"]["difference"]
+        ci = comp["uncertainty"].get("adjusted_difference_ci")
+        txt = _t("raw_vs_adj", lang, a=na, b=nb, ra=pct(comp["raw"]["a"]["mean"]), rb=pct(comp["raw"]["b"]["mean"]),
+                 aa=pct(comp["adjusted"]["a"]), ab=pct(comp["adjusted"]["b"]))
+        if ci and (ci["low"] > 0 or ci["high"] < 0):
+            lo, hi = (ci["low"], ci["high"]) if d > 0 else (-ci["high"], -ci["low"])
+            txt += _t("lead", lang, lead=nb if d > 0 else na, d=_ppa(d, lang), lo=_ppa(lo, lang), hi=_ppa(hi, lang))
+        else:
+            txt += _t("no_diff", lang)
+        why += [Spacer(1, 4), P(txt)]
+        rd = comp["raw"].get("difference")
+        if rd is not None and rd * d < 0:
+            why.append(P(_t("flip", lang), small))
+    es = s.get("edition_summary")
+    if es and es.get(f"text_{lang}"):
+        why += [Spacer(1, 4), P(es[f"text_{lang}"])]
+    story += section("why", *why)
+
+    # 5) hours
+    if plan:
+        changed = [ch for ch in plan["changes"] if ch["delta"]]
+        rows = [[_t("col_topic", lang), _t("col_before", lang), _t("col_after", lang), _t("col_delta", lang), _t("col_reason", lang)]]
+        for ch in changed:
+            name = ch.get(f"title_{lang}") or ch["title"]
+            reason = ch.get(f"reason_{lang}") or ch.get("reason_ru") or ""
+            rows.append([name, ch["before"], ch["after"], f"{ch['delta']:+d} ч".replace("-", "−") if lang == "ru"
+                         else f"{ch['delta']:+d} сағ".replace("-", "−"), reason])
+        flow = [table(rows, [width * 0.23, width * 0.1, width * 0.1, width * 0.12, width * 0.45])] if changed else []
+        if plan.get("total_before") == plan.get("total_after"):
+            flow.append(P(_t("budget_same", lang, total=plan["total_after"]) + " " + (_t("plan_checked", lang) if plan["validation"]["valid"] else ""), small))
+        story += section("hours", *flow)
+    else:
+        story += section("hours", P(_t("no_plan", lang), small))
+
+    # 6) materials
+    srcs = s.get("sources") or []
+    if srcs:
+        rows = [[_t("col_book", lang), _t("col_place", lang), _t("col_fragment", lang)]]
+        for src in srcs:
+            ed = src.get("edition") or {}
+            book = edition_name(ed.get("title"), ed.get("code"), lang) if ed else src["document_filename"]
+            place = f"{_t('page_short', lang)} {src['page_printed']}" if src.get("page_printed") else (src.get("heading") or "—")
+            rows.append([book, place, src["text"][:320]])
+        story += section("materials", table(rows, [width * 0.17, width * 0.22, width * 0.61]),
+                         P(material[f"why_{lang}"], small) if material.get(f"why_{lang}") else None)
+
+    # 7) follow-up
+    check_rows = [[_t("date", lang), dec.get("follow_up_date") or "—"],
+                  [_t("criterion", lang), dec.get("follow_up_criterion") or "—"],
+                  [_t("responsible", lang), dec.get("responsible") or "—"],
+                  [_t("target", lang), dec.get("target_group") or "—"]]
+    if dec.get("approved_at"):
+        check_rows.append([_t("approved", lang), f"{dec.get('approved_by') or ''} · {dec['approved_at'][:10]}"])
+    flow = [table(check_rows, [width * 0.3, width * 0.7], header=False)]
+    for fu in dec.get("follow_ups") or []:
+        r = fu["result"] or {}
+        tg = r.get("target") or {}
+        change = tg.get("adjusted_change")
+        flow.append(P(f"{_t('followup', lang)}: {fu.get('status_label_' + lang) or fu['status_label_ru']}; "
+                      f"{pct((tg.get('before') or {}).get('adjusted'))} → {pct((tg.get('after') or {}).get('adjusted'))}"
+                      + (f" ({pp(change)})" if change is not None else "") + f" — {_t('dynamics_note', lang)}.", base))
+    story += section("check", *flow)
+
+    # 8) limits (human sentences only), kept in one block so it never leaves a lonely line on a new page
+    lims = [x for x in dict.fromkeys(s.get("limitations_kz" if lang == "kz" and s.get("limitations_kz") else "limitations", [])) if x]
+    if lims:
+        story.append(KeepTogether([P(_t("limits", lang), h2), *[P("• " + x, small) for x in lims]]))
+
+    if appendix:
+        story += [PageBreak(), P(_t("appendix", lang), h2), P(_t("appendix_note", lang), small), Spacer(1, 4)]
+        f = s.get("filters") or {}
+        rules = [RULES_HUMAN[k].get(f.get(k), (str(f.get(k)),) * 2)[li] for k in RULES_HUMAN if k in f]
+        story += [P(_t("rules", lang) + ": " + "; ".join(rules) + ".", small)]
+        story += [P(_t("analyses", lang) + ": " + "; ".join(f"{a['kind']} {a['analysis_id'][:8]} · v{a['dataset_version']} · "
+                                                             f"{a['method_version']}" for a in s.get("analyses", [])), small)]
+        if plan and plan.get("objective"):
+            story.append(P(f"planner: {plan['objective'].get('formula', '')}; λ={plan['objective'].get('change_penalty')}", small))
+        if comp:
+            story.append(P(f"comparison: {comp['adjusted'].get('strata_scheme')} / {comp['adjusted'].get('weight_mode')} · "
+                           f"bootstrap {comp['uncertainty'].get('replicates')} · {comp['uncertainty'].get('cluster_unit')}", small))
 
     def on_page(canvas, doc):
         canvas.setFont("OquSans", 7.5)
         canvas.setFillColor(colors.HexColor("#718096"))
-        canvas.drawString(18 * mm, 10 * mm, "OquMap · отчёт сформирован из снимка анализа" +
-                          (" · СИНТЕТИЧЕСКИЕ ДАННЫЕ" if s["dataset"]["is_synthetic"] else ""))
-        canvas.drawRightString(A4[0] - 18 * mm, 10 * mm, f"стр. {doc.page}")
+        canvas.drawString(18 * mm, 10 * mm, _t("footer", lang))
+        canvas.drawRightString(A4[0] - 18 * mm, 10 * mm, f"{_t('page', lang)} {doc.page}")
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=16 * mm, bottomMargin=18 * mm,
-                            title="OquMap — карточка решения", author="OquMap")
+                            title=_t("title", lang, topic=title) if title else _t("title_plain", lang), author="OquMap")
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
     return buf.getvalue()
 

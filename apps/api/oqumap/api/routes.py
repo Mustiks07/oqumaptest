@@ -807,11 +807,11 @@ def follow_up(decision_id: str, body: decisions.FollowUpRequest, p: P, session: 
 
 @router.get("/decisions/{decision_id}/report", tags=["decisions"],
             responses={200: {"content": {"application/pdf": {}, "text/csv": {}, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}}}})
-def decision_report(decision_id: str, p: P, session: DB, format: str = "pdf"):
+def decision_report(decision_id: str, p: P, session: DB, format: str = "pdf", lang: str = "ru", appendix: bool = False):
     d = decisions.decision_payload(session, decisions.get(session, p.org_id, decision_id))
     name = f"oqumap-decision-{d['id'][:8]}-v{d['version']}"
     if format == "pdf":
-        body, media = reports.to_pdf(d), "application/pdf"
+        body, media = reports.to_pdf(d, lang, appendix), "application/pdf"
     elif format == "csv":
         body, media = reports.to_csv(d), "text/csv; charset=utf-8"
     elif format == "xlsx":
