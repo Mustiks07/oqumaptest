@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { I18nProvider } from "../i18n/I18n";
 import { ErrorState, ModeBadge, StaleBanner, QueryView } from "../ui";
 import { ApiError } from "../api/client";
@@ -18,8 +18,10 @@ test("AI mode is always visible to the user", () => {
   expect(screen.getByText("ИИ-модель не подключена — используется проверенный сценарий")).toBeInTheDocument();
 });
 
-test("error state shows the request id and a retry button", () => {
+test("error state hides request id in technical details and shows a retry button", async () => {
   wrap(<ErrorState error={new ApiError(404, "not_found", "dataset not found", {}, "abc123")} onRetry={() => {}} />);
+  expect(screen.queryByText("abc123")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Технические сведения/ }));
   expect(screen.getByText("abc123")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Повторить" })).toBeInTheDocument();
 });

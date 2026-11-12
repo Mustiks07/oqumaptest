@@ -84,7 +84,6 @@ export function LoginPage() {
               {t("login.open_demo")}
             </Button>
             {busy === "demo" && <Loading label={t("login.preparing")} />}
-            {c.deployment_mode === "public_demo" && <p className="small muted">{t("login.open_demo_note")}</p>}
           </div>
         ) : (
           <Alert tone="info">{t("login.demo_disabled")}</Alert>

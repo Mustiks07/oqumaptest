@@ -56,14 +56,17 @@ export function Loading({ label }: { label?: string }) {
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const { t } = useI18n();
   const e = error instanceof ApiError ? error : null;
+  const retryMinutes = e?.code === "rate_limited"
+    ? Math.max(1, Math.ceil(Number(e.details.retry_after ?? 60) / 60))
+    : null;
   return (
     <div className="state" role="alert">
       <strong style={{ color: "var(--color-danger)" }}>{t("common.error")}</strong>
-      <span>{e ? e.message : String((error as Error)?.message ?? error)}</span>
+      <span>{retryMinutes ? t("error.rate_limited", { minutes: retryMinutes }) : e ? e.message : String((error as Error)?.message ?? error)}</span>
       {e?.requestId && (
-        <span className="xs">
-          {t("common.request_id")}: <code>{e.requestId}</code> · {e.code}
-        </span>
+        <Disclosure summary={t("common.technical_details")}>
+          <span className="xs">{t("common.request_id")}: <code>{e.requestId}</code></span>
+        </Disclosure>
       )}
       {onRetry && (
         <Button onClick={onRetry} variant="primary">
