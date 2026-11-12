@@ -8,6 +8,7 @@ import { Badge, Button, CI, Card, Disclosure, EmptyState, QueryView, ShareBar, S
 import { heatColor } from "../ui/charts";
 import { num, pct } from "../ui/format";
 import { FilterBar } from "./Filters";
+import { useLabels } from "../ui/labels";
 
 export function NeedDataset() {
   const { t } = useI18n();
@@ -22,6 +23,7 @@ export function NeedDataset() {
 
 export function OverviewPage() {
   const { t, lang, pick } = useI18n();
+  const labels = useLabels();
   const { datasetId, setTopicId, markStep } = useAppState();
   const q = useOverview();
   const nav = useNavigate();
@@ -143,8 +145,8 @@ export function OverviewPage() {
                           <tr>
                             <th>{t("compare.topic")}</th>
                             {r.heatmap.cohorts.map((c) => (
-                              <th key={c.cohort_id} className="xs" title={`${c.school_code} · ${c.edition_code ?? ""}`} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", padding: "6px 2px" }}>
-                                {c.code} {c.edition_code ? `· ${c.edition_code}` : ""}
+                              <th key={c.cohort_id} className="xs" title={`${c.school_code} · ${labels.edition(c.edition_code)}`} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", padding: "6px 2px" }}>
+                                {c.code}
                               </th>
                             ))}
                           </tr>

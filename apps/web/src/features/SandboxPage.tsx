@@ -7,21 +7,23 @@ import { useI18n } from "../i18n/I18n";
 import { useAppState } from "../state/AppState";
 import { Alert, Badge, Button, Card, EmptyState, ErrorState, Loading } from "../ui";
 import { pct } from "../ui/format";
+import { useLabels, type Labels } from "../ui/labels";
 
 interface Draft { name: string; ops: Op[]; text: string }
 
-function opText(o: Op): string {
+function opText(o: Op, labels: Labels): string {
   const v = o.value ?? "";
+  const topic = labels.topic(o.topic);
   switch (o.op) {
-    case "add": return `${o.topic} +${v} ч`;
-    case "remove": return `${o.topic} −${v} ч`;
-    case "set": return `${o.topic} = ${v} ч`;
-    case "min": return `${o.topic} ≥ ${v} ч`;
-    case "max": return `${o.topic} ≤ ${v} ч`;
-    case "fix": return `${o.topic}: без изменений`;
+    case "add": return `${topic} +${v} ч`;
+    case "remove": return `${topic} −${v} ч`;
+    case "set": return `${topic} = ${v} ч`;
+    case "min": return `${topic} ≥ ${v} ч`;
+    case "max": return `${topic} ≤ ${v} ч`;
+    case "fix": return `${topic}: без изменений`;
     case "max_change": return `каждая тема ±${v} ч`;
     case "budget": return `бюджет ${v} ч`;
-    case "priority": return `${o.topic}: приоритет ${v}`;
+    case "priority": return `${topic}: приоритет ${v}`;
     default: return o.op;
   }
 }
@@ -30,6 +32,7 @@ function opText(o: Op): string {
 export function SandboxPage({ readOnlyDemo }: { readOnlyDemo?: { text: string } }) {
   const { t, lang } = useI18n();
   const st = useAppState();
+  const labels = useLabels();
   const nav = useNavigate();
   const [text, setText] = useState(readOnlyDemo?.text ?? "");
   const [preview, setPreview] = useState<IntentPreview | null>(null);
@@ -70,11 +73,11 @@ export function SandboxPage({ readOnlyDemo }: { readOnlyDemo?: { text: string } 
           <div className="stack" data-testid="sandbox-diff">
             <strong className="small">{t("sandbox.diff")}</strong>
             <ul className="small">
-              {preview.ops.map((o, i) => <li key={i}><code>{opText(o)}</code></li>)}
+              {preview.ops.map((o, i) => <li key={i}>{opText(o, labels)}</li>)}
             </ul>
             <table className="table xs">
               <thead><tr><th>{t("sandbox.topic")}</th><th>{t("sandbox.field")}</th><th>{t("sandbox.was")}</th><th>{t("sandbox.becomes")}</th></tr></thead>
-              <tbody>{preview.diff.map((d, i) => <tr key={i}><td>{d.topic ?? "—"}</td><td className="mono">{d.field}</td><td>{String(d.before ?? "—")}</td><td><strong>{String(d.after)}</strong></td></tr>)}</tbody>
+              <tbody>{preview.diff.map((d, i) => <tr key={i}><td>{labels.topic(d.topic)}</td><td>{d.field === "target_hours" ? (lang === "kz" ? "Жоспардағы сағат" : "Часы в плане") : labels.text(d.field)}</td><td>{String(d.before ?? "—")}</td><td><strong>{String(d.after)}</strong></td></tr>)}</tbody>
             </table>
             {preview.not_understood.length > 0 && (
               <Alert tone="warn" title={t("sandbox.not_understood")}>{preview.not_understood.join("; ")}</Alert>
@@ -90,7 +93,7 @@ export function SandboxPage({ readOnlyDemo }: { readOnlyDemo?: { text: string } 
             {drafts.map((d, i) => (
               <div key={i} className="row small" style={{ gap: 6 }}>
                 <Badge tone="info">{d.name}</Badge>
-                <span className="mono xs">{d.ops.map(opText).join(" · ")}</span>
+                <span className="xs">{d.ops.map((o) => opText(o, labels)).join(" · ")}</span>
                 <Button size="sm" variant="ghost" onClick={() => setDrafts(drafts.filter((_, j) => j !== i))} aria-label={t("common.remove")}>×</Button>
               </div>
             ))}
@@ -104,7 +107,7 @@ export function SandboxPage({ readOnlyDemo }: { readOnlyDemo?: { text: string } 
       {run.isError && <ErrorState error={run.error} />}
       {res && run.data && (
         <Card title={t("sandbox.compare")}>
-          <p className="xs muted">{res.note_ru} · {t("sandbox.saved")} <code>{run.data.context.analysis_id.slice(0, 8)}</code></p>
+          <p className="xs muted">{labels.text(res.note_ru)}</p>
           <div className="table-wrap" tabIndex={0}>
             <table className="table" data-testid="sandbox-table">
               <thead>
@@ -114,7 +117,7 @@ export function SandboxPage({ readOnlyDemo }: { readOnlyDemo?: { text: string } 
               <tbody>
                 {res.topics.map((tp) => (
                   <tr key={tp.code}>
-                    <td>{tp.code} {lang === "kz" ? tp.title_kz : tp.title_ru} {tp.score != null && <span className="xs muted">· {pct(tp.score, lang)}</span>}</td>
+                    <td>{lang === "kz" ? tp.title_kz : tp.title_ru} {tp.score != null && <span className="xs muted">· {pct(tp.score, lang)}</span>}</td>
                     <td className="num">{res.before.hours[tp.code]}</td>
                     {res.scenarios.map((s) => {
                       const h = s.hours?.[tp.code];
@@ -162,7 +165,7 @@ function ScenarioCard({ s, onDecision, readOnly }: { s: SandboxScenario; onDecis
       ) : s.conflict ? (
         <div className="small" data-testid="sandbox-conflict">
           <strong>{t("sandbox.conflict")}:</strong>
-          <ul>{s.conflict.constraints.map((c, i) => <li key={i}>{c.message_ru ?? c.label_ru ?? c.code}</li>)}</ul>
+          <ul>{s.conflict.constraints.map((c, i) => <li key={i}>{c.message_ru ?? c.label_ru ?? t("sandbox.conflict")}</li>)}</ul>
         </div>
       ) : null}
     </div>

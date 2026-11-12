@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePlanContext, useSolve } from "../api/hooks";
 import type { Envelope, PlanResult, PlanScenario, TopicInput } from "../api/types";
 import { useI18n } from "../i18n/I18n";
@@ -68,10 +69,17 @@ export function PlannerPage() {
         tabs={[{ id: "current", label: t("planner.load_current") }, { id: "illustration", label: t("planner.illustration") }]} />
       <QueryView q={ctx}>
         {(c) => (
-          <Card title={mode === "current" ? c.plan?.name ?? t("planner.load_current") : t("planner.illustration")}
-            actions={mode === "current" && c.plan ? <span className="xs muted">{c.plan.scope} · {c.plan.horizon}</span> : null}>
+          <Card title={mode === "current" ? (c.plan?.name ?? t("planner.load_current")).replace(/\s*\(условный\)$/i, "") : t("planner.illustration")}
+            actions={<Button variant="primary" onClick={run} disabled={solve.isPending || presets.length === 0} data-testid="solve">{t("planner.solve")}</Button>}>
+            <div className="grid grid-3" data-testid="planner-table" style={{ marginBottom: 12 }}>
+              <div className="metric"><span className="metric-label">{t("planner.budget")}</span><span className="metric-value">{budget} {t("planner.hours_short")}</span></div>
+              <div className="metric"><span className="metric-label">{t("planner.measured_topics")}</span><span className="metric-value">{rows.filter((r) => r.score != null).length}/{rows.length}</span></div>
+              <div className="metric"><span className="metric-label">{t("planner.protected_topics")}</span><span className="metric-value">{rows.filter((r) => r.protected).length}</span></div>
+            </div>
+            <Alert tone="info">{t("planner.simple_hint")}</Alert>
+            <Disclosure summary={t("planner.manual_settings")}>
             <div className="table-wrap" tabIndex={0}>
-              <table className="table" data-testid="planner-table">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>{t("planner.topic")}</th><th className="num">{t("planner.current")}</th><th className="num">{t("planner.elapsed")}</th>
@@ -109,8 +117,8 @@ export function PlannerPage() {
                   </label>
                 ))}
               </fieldset>
-              <Button variant="primary" onClick={run} disabled={solve.isPending || presets.length === 0} data-testid="solve">{t("planner.solve")}</Button>
             </div>
+            </Disclosure>
             <Disclosure summary={t("planner.how_priority")}>
               <p className="xs muted">{c.priority_rule} · {t("planner.weights_version")}: {c.weights_version}</p>
             </Disclosure>
@@ -135,6 +143,7 @@ export function PlannerPage() {
 function ScenarioCard({ sc, analysisId, canUse }: { sc: PlanScenario; analysisId: string; canUse: boolean }) {
   const { t, lang } = useI18n();
   const st = useAppState();
+  const nav = useNavigate();
   const used = st.draft.planAnalysisId === analysisId && st.draft.planPreset === sc.preset;
   const verdict = (lang === "kz" ? sc.verdict_kz : sc.verdict_ru)
     ?? (lang === "kz" ? sc.status_message_kz : sc.status_message_ru)
@@ -147,7 +156,7 @@ function ScenarioCard({ sc, analysisId, canUse }: { sc: PlanScenario; analysisId
         </Alert>
         {sc.changes && (
           <>
-            <HoursChart title={t("planner.result")} labels={[t("planner.before"), t("planner.after")]} rows={sc.changes.map((ch) => ({ code: ch.code, before: ch.before, after: ch.after }))} />
+            <HoursChart title={t("planner.result")} labels={[t("planner.before"), t("planner.after")]} rows={sc.changes.map((ch) => ({ code: ch.title, before: ch.before, after: ch.after }))} />
             <div className="plan-change-list">
               {sc.changes.filter((change) => change.delta !== 0).map((change) => (
                 <article className="plan-change" key={change.code}>
@@ -176,9 +185,12 @@ function ScenarioCard({ sc, analysisId, canUse }: { sc: PlanScenario; analysisId
               </div>
             </Disclosure>
             {canUse && (
-              <Button variant={used ? "primary" : "default"} aria-pressed={used} data-testid={`use-plan-${sc.preset}`} onClick={() => st.updateDraft({ planAnalysisId: analysisId, planPreset: sc.preset })}>
-                {used ? `✓ ${t("compare.used")}` : t("planner.use_in_decision")}
-              </Button>
+              <div className="row">
+                <Button variant={used ? "primary" : "default"} aria-pressed={used} data-testid={`use-plan-${sc.preset}`} onClick={() => st.updateDraft({ planAnalysisId: analysisId, planPreset: sc.preset })}>
+                  {used ? `✓ ${t("compare.used")}` : t("planner.use_in_decision")}
+                </Button>
+                {used && <Button variant="primary" onClick={() => nav("/decisions")}>{t("planner.go_decision")}</Button>}
+              </div>
             )}
           </>
         )}

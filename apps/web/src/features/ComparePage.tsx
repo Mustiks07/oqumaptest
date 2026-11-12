@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useComparison, useCurrentDataset, useCurriculum, useEditionSummary, useGenerate, useOverview } from "../api/hooks";
@@ -16,6 +17,7 @@ import { NeedDataset } from "./OverviewPage";
 export function ComparePage() {
   const { t, lang, pick } = useI18n();
   const st = useAppState();
+  const nav = useNavigate();
   const cur = useCurriculum();
   const L = useLabels();
   const { dataset } = useCurrentDataset();
@@ -59,6 +61,7 @@ export function ComparePage() {
           <h1>{t("compare.title")}</h1>
           <p className="muted">{t("compare.lead")}</p>
         </div>
+        <Button variant="primary" onClick={() => nav("/planner")}>{t("topic.to_plan")}</Button>
       </div>
       <FilterBar compact />
       {summary.isLoading && <Loading label={t("compare.summary_loading")} />}

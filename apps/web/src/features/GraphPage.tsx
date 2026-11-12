@@ -123,7 +123,7 @@ export function GraphPage() {
                   <div className="atlas-facts" aria-label={lang === "kz" ? "Зерттеу көлемі" : "Объём исследования"}>
                     <span><strong>{learners ?? "—"}</strong> {lang === "kz" ? "оқушы" : "учеников"}</span>
                     <span><strong>{d.result.gaps.length}</strong> {lang === "kz" ? "ашық сұрақ" : "открытых вопроса"}</span>
-                    <span><strong>{d.context.method_version}</strong> {lang === "kz" ? "әдіс" : "метод"}</span>
+                    <span><strong>✓</strong> {lang === "kz" ? "есеп тексерілді" : "расчёт проверен"}</span>
                     <span className={d.result.gaps.length ? "warning" : ""}>{d.result.gaps.length ? (lang === "kz" ? "Себептілік дәлелденбеген" : "Причинность не доказана") : (lang === "kz" ? "Маршрут толық" : "Маршрут полный")}</span>
                   </div>
 

@@ -7,8 +7,10 @@ import type { DecisionOut, FollowUpResponse, GenerationOut } from "../api/types"
 import { useI18n } from "../i18n/I18n";
 import type { DictKey } from "../i18n/dict";
 import { useAppState } from "../state/AppState";
+import type { DecisionDraftForm } from "../state/AppState";
 import { Alert, Badge, Button, Card, Diff, EmptyState, ErrorState, Field, Loading, ModeBadge, QueryView, ReasonList, StatusBadge } from "../ui";
 import { dateTime, num, pct, pp } from "../ui/format";
+import { useLabels } from "../ui/labels";
 import { ImportWizard } from "./ImportPage";
 import { NeedDataset } from "./OverviewPage";
 import { LearningLoopCard, type LearningLoopSnapshot } from "./measurement/LearningLoopCard";
@@ -18,6 +20,7 @@ export function DecisionsPage() {
   const { datasetId } = useAppState();
   const params = useParams();
   const list = useDecisions();
+  const labels = useLabels();
   const nav = useNavigate();
   if (!datasetId) return <NeedDataset />;
   return (
@@ -38,7 +41,7 @@ export function DecisionsPage() {
                   <li key={d.id}>
                     <button type="button" className={`btn ${params.decisionId === d.id ? "btn-primary" : ""}`} style={{ width: "100%", justifyContent: "flex-start", textAlign: "left", whiteSpace: "normal", minHeight: 52 }} onClick={() => nav(`/decisions/${d.id}`)}>
                       <span>
-                        <strong>{d.topic_code ?? "—"}</strong> · v{d.version} · {t(`decision.status.${d.status}` as DictKey)}
+                        <strong>{labels.topic(d.topic_code)}</strong> · v{d.version} · {t(`decision.status.${d.status}` as DictKey)}
                         <br />
                         <span className="xs">{d.target_group} · {dateTime(d.created_at, lang)}</span>
                         {d.outcome_status && <><br /><span className="xs">{t(`followup.${d.outcome_status}` as DictKey)}</span></>}
@@ -66,14 +69,20 @@ function NewDecision() {
   const d = st.draft;
   const edition = cur.data?.editions.find((e) => st.filters.edition_ids?.includes(e.id));
   const topic = cur.data?.topics.find((x) => x.id === st.topicId);
-  const [form, setForm] = useState({
-    target_group: edition ? `Классы, работающие по изданию ${edition.code}` : "Все классы набора",
+  const labels = useLabels();
+  const emptyForm = (): DecisionDraftForm => ({
+    target_group: edition ? (lang === "kz" ? `${labels.edition(edition.id)} бойынша оқитын сыныптар` : `Классы, работающие по ${labels.edition(edition.id)}`) : (lang === "kz" ? "Жинақтың барлық сыныптары" : "Все классы набора"),
     problem: "", hypothesis: "", action: "", responsible: "", follow_up_date: "", follow_up_criterion: "",
   });
+  const [form, setForm] = useState<DecisionDraftForm>(() => d.form ?? emptyForm());
   const [gen, setGen] = useState<GenerationOut | null>(null);
   const [busy, setBusy] = useState<"" | "rec" | "save">("");
   const [error, setError] = useState<unknown>(null);
-  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const applyForm = (next: DecisionDraftForm) => {
+    setForm(next);
+    st.updateDraft({ form: next });
+  };
+  const set = (k: keyof DecisionDraftForm, v: string) => applyForm({ ...form, [k]: v });
 
   async function recommend() {
     if (!d.topicAnalysisId) return;
@@ -83,13 +92,21 @@ function NewDecision() {
       const g = await api.post<GenerationOut>("/api/v1/ai/recommend", { topic_analysis_id: d.topicAnalysisId, comparison_analysis_id: d.comparisonAnalysisId ?? null, lang });
       setGen(g);
       const o = g.output as { problem: string; hypothesis: string; action: string; check: string };
-      setForm((f) => ({ ...f, problem: o.problem, hypothesis: o.hypothesis, action: o.action, follow_up_criterion: o.check }));
-      st.updateDraft({ generationId: g.generation_id, sourceIds: Array.from(new Set([...d.sourceIds, ...g.citations])) });
+      const next = { ...form, problem: o.problem, hypothesis: o.hypothesis, action: o.action, follow_up_criterion: o.check };
+      applyForm(next);
+      st.updateDraft({ generationId: g.generation_id, sourceIds: Array.from(new Set([...d.sourceIds, ...g.citations])), form: next });
     } catch (e) {
       setError(e);
     } finally {
       setBusy("");
     }
+  }
+  function clearDraft() {
+    const next = emptyForm();
+    st.resetDraft();
+    setForm(next);
+    setGen(null);
+    setError(null);
   }
 
   async function save() {
@@ -116,14 +133,15 @@ function NewDecision() {
     <div className="stack">
       <Card title={t("decision.collected")}>
         <ul className="small" data-testid="draft-refs">
-          <li>{t("nav.topic")}: {topic ? `${topic.code} ${pick(topic, "title")}` : "—"} {d.topicAnalysisId ? <code>{d.topicAnalysisId.slice(0, 8)}</code> : <Badge tone="warn">нет</Badge>}</li>
-          <li>{t("nav.compare")}: {d.comparisonAnalysisId ? <code>{d.comparisonAnalysisId.slice(0, 8)}</code> : "—"}</li>
-          <li>{t("nav.planner")}: {d.planAnalysisId ? <><code>{d.planAnalysisId.slice(0, 8)}</code> · {t(`planner.preset.${d.planPreset}` as DictKey)}</> : "—"}</li>
+          <li>{t("nav.topic")}: {st.topicId ? labels.topic(st.topicId) : (topic ? pick(topic, "title") : "—")} {d.topicAnalysisId ? <Badge tone="ok">{t("decision.added")}</Badge> : <Badge tone="warn">{t("decision.not_added")}</Badge>}</li>
+          <li>{t("nav.compare")}: {d.comparisonAnalysisId ? <Badge tone="ok">{t("decision.added")}</Badge> : <span className="muted">{t("decision.optional")}</span>}</li>
+          <li>{t("nav.planner")}: {d.planAnalysisId ? <><Badge tone="ok">{t("decision.added")}</Badge> · {t(`planner.preset.${d.planPreset}` as DictKey)}</> : <span className="muted">{t("decision.optional")}</span>}</li>
           <li>{t("decision.sources")}: {d.sourceIds.length}</li>
         </ul>
         {!d.topicAnalysisId && <Alert tone="warn">{t("decision.missing")}</Alert>}
         <div className="row">
           <Button onClick={recommend} disabled={!d.topicAnalysisId || busy !== ""} data-testid="draft-ai">{t("decision.draft_ai")}</Button>
+          <Button variant="ghost" onClick={clearDraft} disabled={busy !== ""} data-testid="clear-draft">{t("decision.clear_draft")}</Button>
           {gen && <ModeBadge mode={gen.mode} fallback={gen.fallback_reason} />}
         </div>
       </Card>
@@ -273,36 +291,37 @@ interface Snapshot {
 
 function SnapshotView({ s }: { s: Snapshot }) {
   const { t, lang } = useI18n();
+  const labels = useLabels();
   return (
     <>
       <Card title={t("decision.evidence")}>
         {s.topic && s.topic.summary && (
           <div className="stack">
-            <strong>{s.topic.code} {s.topic.title_ru}: {pct(s.topic.summary.mean, lang)} ({num(s.topic.summary.n_learners, lang)} {t("common.learners")}, {s.topic.summary.n_classes} {t("common.classes")})</strong>
-            <ul className="small">{s.topic.objectives.map((o) => <li key={o.code}><code>{o.code}</code> {o.text_ru}: {pct(o.mean, lang)} <StatusBadge status={o.status} /></li>)}</ul>
+            <strong>{labels.topic(s.topic.code)}: {pct(s.topic.summary.mean, lang)} ({num(s.topic.summary.n_learners, lang)} {t("common.learners")}, {s.topic.summary.n_classes} {t("common.classes")})</strong>
+            <ul className="small">{s.topic.objectives.map((o) => <li key={o.code}>{labels.objective(o.code)}: {pct(o.mean, lang)} <StatusBadge status={o.status} /></li>)}</ul>
             {s.topic.misconceptions.length > 0 && <ul className="small">{s.topic.misconceptions.map((m) => <li key={m.code}>{m.label_ru}: {m.n_learners} ({pct(m.share_of_learners, lang)})</li>)}</ul>}
           </div>
         )}
         {s.comparison && (
           <div className="stack" style={{ marginTop: 12 }}>
-            <strong>{t("nav.compare")}: {s.comparison.editions.a.code} vs {s.comparison.editions.b.code} · {t(`comparability.${s.comparison.status}` as DictKey)} · {t(`inference.${s.comparison.inference_level}` as DictKey)}</strong>
+            <strong>{t("nav.compare")}: {labels.edition(s.comparison.editions.a.code)} — {labels.edition(s.comparison.editions.b.code)}</strong>
             <span className="small">{t("compare.raw")}: {pct(s.comparison.raw.a.mean, lang)} / {pct(s.comparison.raw.b.mean, lang)} (<Diff value={s.comparison.raw.difference} />); {t("compare.adjusted")}: {pct(s.comparison.adjusted.a, lang)} / {pct(s.comparison.adjusted.b, lang)} (<Diff value={s.comparison.adjusted.difference} />)
               {s.comparison.uncertainty.adjusted_difference_ci ? `; ${t("common.ci95")} ${pp(s.comparison.uncertainty.adjusted_difference_ci.low, lang)} … ${pp(s.comparison.uncertainty.adjusted_difference_ci.high, lang)}` : ""}</span>
             <ReasonList reasons={s.comparison.reasons.filter((r) => r.severity !== "info")} />
           </div>
         )}
-        <p className="xs muted" style={{ marginTop: 8 }}>{s.analyses.map((a) => `${a.kind} ${a.analysis_id.slice(0, 8)} (v${a.dataset_version}, ${a.method_version})`).join(" · ")}{s.ai ? ` · AI: ${s.ai.task} / ${s.ai.mode}` : ""}</p>
+        <details className="xs muted" style={{ marginTop: 8 }}><summary>{t("common.technical_details")}</summary>{s.analyses.map((a) => `${a.kind} ${a.analysis_id.slice(0, 8)} (v${a.dataset_version}, ${a.method_version})`).join(" · ")}{s.ai ? ` · AI: ${s.ai.task} / ${s.ai.mode}` : ""}</details>
       </Card>
       {s.plan && (
         <Card title={t("decision.hours")}>
           <div className="table-wrap" tabIndex={0}>
             <table className="table">
               <thead><tr><th>{t("planner.topic")}</th><th className="num">{t("planner.before")}</th><th className="num">{t("planner.after")}</th><th className="num">{t("planner.delta")}</th></tr></thead>
-              <tbody>{s.plan.changes.map((c) => <tr key={c.code}><td>{c.code}</td><td className="num">{c.before}</td><td className="num">{c.after}</td><td className="num">{c.delta > 0 ? `+${c.delta}` : c.delta}</td></tr>)}
+              <tbody>{s.plan.changes.map((c) => <tr key={c.code}><td>{labels.topic(c.code)}</td><td className="num">{c.before}</td><td className="num">{c.after}</td><td className="num">{c.delta > 0 ? `+${c.delta}` : c.delta}</td></tr>)}
                 <tr><td><strong>{t("planner.total")}</strong></td><td className="num">{s.plan.total_before}</td><td className="num">{s.plan.total_after}</td><td /></tr></tbody>
             </table>
           </div>
-          <p className="xs muted">{t(`planner.preset.${s.plan.preset}` as DictKey)} · {s.plan.status} · {s.plan.validation.valid ? t("planner.valid") : ""}</p>
+          <p className="xs muted">{t(`planner.preset.${s.plan.preset}` as DictKey)} · {s.plan.validation.valid ? t("planner.valid") : ""}</p>
         </Card>
       )}
       <Card title={t("decision.sources")}>

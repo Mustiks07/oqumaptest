@@ -6,12 +6,14 @@ import { useI18n } from "../i18n/I18n";
 import { useAppState } from "../state/AppState";
 import { Alert, Badge, Button, CI, Card, Disclosure, EmptyState, ErrorState, Metric, ModeBadge, QueryView, ShareBar, StaleBanner, StatusBadge } from "../ui";
 import { num, pct } from "../ui/format";
+import { useLabels } from "../ui/labels";
 import { FilterBar } from "./Filters";
 import { NeedDataset } from "./OverviewPage";
 import { SourceDialog } from "./SourceDialog";
 
 export function TopicPage() {
   const { t, lang, pick } = useI18n();
+  const labels = useLabels();
   const params = useParams();
   const { datasetId, topicId, setTopicId, updateDraft, draft, markStep } = useAppState();
   const id = params.topicId ?? topicId;
@@ -61,15 +63,15 @@ export function TopicPage() {
                 ) : (
                   <Alert tone="warn" title={t(`status.${r.status}` as never)}>{t("bands.note")}</Alert>
                 )}
-                <p className="xs muted" style={{ marginTop: 8 }}>{t("common.share_note")} {s?.ci_method ? `CI: ${s.ci_method}` : ""}</p>
+                <p className="xs muted" style={{ marginTop: 8 }}>{t("common.share_note")} {s?.ci_method ? t("common.ci95") : ""}</p>
               </Card>
               <div className="grid grid-2">
                 <Card title={t("topic.objectives")}>
                   <ul className="stack" style={{ listStyle: "none", padding: 0, margin: 0 }}>
                     {r.objectives.map((o) => (
                       <li key={o.objective_id}>
-                        <div className="spread"><span><code>{o.code}</code> {pick(o, "text")}</span><StatusBadge status={o.status} /></div>
-                        {o.score ? <ShareBar value={o.score.mean} label={o.code} /> : null}
+                        <div className="spread"><span>{pick(o, "text")}</span><StatusBadge status={o.status} /></div>
+                        {o.score ? <ShareBar value={o.score.mean} label={pick(o, "text")} /> : null}
                         <span className="xs muted">{o.n_items_confirmed} {t("topic.n_items_conf")} · {o.n_items_proposed} {t("topic.n_items_prop")}</span>
                       </li>
                     ))}
@@ -80,7 +82,7 @@ export function TopicPage() {
                     <ul className="stack" style={{ listStyle: "none", padding: 0, margin: 0 }}>
                       {r.prerequisites.map((p) => (
                         <li key={p.objective_id as string}>
-                          <div><code>{p.code as string}</code> ({p.topic_code as string}) {pick(p as Record<string, unknown>, "text")} → <code>{p.target_code as string}</code></div>
+                          <div>{pick(p as Record<string, unknown>, "text")} → {labels.objective(p.target_code as string)}</div>
                           {p.score ? <ShareBar value={(p.score as { mean: number }).mean} /> : <span className="xs muted">{t("status.not_measured")}</span>}
                         </li>
                       ))}
@@ -104,7 +106,7 @@ export function TopicPage() {
                         return (
                           <li key={src.link_id} className="stack" style={{ gap: 4 }}>
                             <div className="spread">
-                              <span className="small"><strong>{src.edition_code}</strong> {src.page_printed ? `${t("materials.page")} ${src.page_printed}` : `${t("materials.anchor")} ${src.anchor}`} · <code>{src.objective_code}</code></span>
+                              <span className="small"><strong>{labels.edition(src.edition_code)}</strong> {src.page_printed ? `${t("materials.page")} ${src.page_printed}` : t("materials.fragment")} · {labels.objective(src.objective_code)}</span>
                               <span className="row" style={{ gap: 4 }}>
                                 <StatusBadge status={src.status} labelKey={`link.${src.status}` as never} />
                                 <Button size="sm" onClick={() => setSource(src.source_id)}>{t("common.open")}</Button>
@@ -128,7 +130,7 @@ export function TopicPage() {
                       <tbody>
                         {r.classes.map((c) => (
                           <tr key={c.cohort_id as string}>
-                            <td className="mono small">{c.code as string}</td><td className="small">{c.school_code as string}</td><td className="small">{(c.edition_code as string) ?? "—"}</td>
+                            <td className="small">{c.code as string}</td><td className="small">{c.school_code as string}</td><td className="small">{labels.edition(c.edition_code as string)}</td>
                             <td className="num">{c.n as number}</td><td><ShareBar value={c.mean as number} /></td>
                           </tr>
                         ))}
@@ -148,18 +150,19 @@ export function TopicPage() {
 
 function ItemRow({ it }: { it: ItemEvidence }) {
   const { t, lang } = useI18n();
+  const labels = useLabels();
   return (
     <div className="card" style={{ boxShadow: "none" }}>
       <div className="spread">
-        <span><code>{it.code}</code> {lang === "kz" ? it.stem_kz : it.stem_ru}</span>
+        <span>{lang === "kz" ? it.stem_kz : it.stem_ru}</span>
         <span className="row small" style={{ gap: 6 }}>
-          {it.objectives.map((o) => <Badge key={o.link_id as string} tone={o.status === "confirmed" ? "ok" : "warn"}>{o.code as string} ×{Number(o.weight).toFixed(2)}</Badge>)}
+          {it.objectives.map((o) => <Badge key={o.link_id as string} tone={o.status === "confirmed" ? "ok" : "warn"}>{labels.objective(o.code as string)}</Badge>)}
         </span>
       </div>
       <div className="row small" style={{ margin: "6px 0" }}>
         <span>{t("topic.p_correct")}: <strong>{pct(it.p_correct, lang)}</strong> (n={it.n_answered})</span>
         <span>{t("topic.omit_rate")}: {pct(it.omit_rate, lang)} ({it.n_omitted})</span>
-        <span className="muted">{t("topic.weight")}: {it.topic_weight.toFixed(2)}</span>
+        <details className="xs muted"><summary>{t("common.technical_details")}</summary>{t("topic.weight")}: {num(it.topic_weight, lang, 2)}</details>
       </div>
       <div className="table-wrap" tabIndex={0}>
         <table className="table">
@@ -169,7 +172,7 @@ function ItemRow({ it }: { it: ItemEvidence }) {
                 <td style={{ width: 30 }} className={o.correct ? "option-correct" : ""}>{o.key}{o.correct ? " ✓" : ""}</td>
                 <td className={o.correct ? "option-correct" : ""} style={{ width: 140 }}>{o.text}</td>
                 <td style={{ width: 220 }}><ShareBar value={o.share} label={o.key} /></td>
-                <td className="xs muted">{o.misconception ?? ""}</td>
+                <td className="xs muted">{o.misconception ? labels.misconception(o.misconception) : ""}</td>
               </tr>
             ))}
           </tbody>
@@ -192,9 +195,9 @@ function Misconceptions({ r, analysisId }: { r: TopicEvidenceResult; analysisId:
             <div key={m.code} className="card" style={{ boxShadow: "none" }}>
               <div className="spread">
                 <strong>{lang === "kz" ? m.label_kz : m.label_ru}</strong>
-                <span className="small">{num(m.n_learners, lang)} {t("common.learners")} ({pct(m.share_of_learners, lang)}) · {m.items.join(", ")}</span>
+                <span className="small">{num(m.n_learners, lang)} {t("common.learners")} ({pct(m.share_of_learners, lang)}) · {m.items.length} {t("common.items")}</span>
               </div>
-              <div className="small"><span className="muted">{t("topic.check")}:</span> {m.diagnostic_check_ru}</div>
+              <div className="small"><span className="muted">{t("topic.check")}:</span> {lang === "kz" ? "Оқушыдан шешімнің әр қадамын түсіндіріп, ұқсас тапсырманы өз бетімен орындауын сұраңыз." : m.diagnostic_check_ru}</div>
               <div className="row" style={{ marginTop: 6 }}>
                 <Button size="sm" disabled={gen.isPending} data-testid={`interpret-${m.code}`}
                   onClick={() => gen.mutate({ analysis_id: analysisId, code: m.code, lang }, { onSuccess: (g) => setResult((x) => ({ ...x, [m.code]: g })) })}>

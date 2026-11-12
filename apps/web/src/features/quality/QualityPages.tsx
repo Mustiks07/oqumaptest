@@ -6,6 +6,7 @@ import { dateTime } from "../../ui/format";
 import { useAssessmentQuality, useAssignments, useDif, useItemQuality, useMAction, useQualityList, type ItemQuality, type QualityRules } from "../measurement/api";
 import { ActionError, CodeLabel, KV, MQuery, Messages, Num, Pager, Share, Stat, useRoles, useUrlState } from "../measurement/components";
 import { useMT } from "../measurement/i18n";
+import { useLabels } from "../../ui/labels";
 
 function RulesBar({ rules, onChange }: { rules: QualityRules; onChange: (r: QualityRules) => void }) {
   const { t2 } = useMT();
@@ -119,6 +120,7 @@ function Histogram({ bins }: { bins: { from: number; to: number; count: number }
 
 function ItemRow({ it, open, onToggle }: { it: ItemQuality; open: boolean; onToggle: () => void }) {
   const { t2, lang } = useMT();
+  const labels = useLabels();
   const warn = it.flags.some((f) => f.severity === "warn");
   return (
     <>
@@ -166,14 +168,14 @@ function ItemRow({ it, open, onToggle }: { it: ItemQuality; open: boolean; onTog
                         <td className="num"><Num v={o.count} /> (<Share v={o.share_of_answered} />)</td>
                         <td className="num"><Share v={o.mean_rest_score} /></td>
                         <td className="num"><Stat value={o.point_biserial_rest.value} reason={o.point_biserial_rest.unavailable_reason} /></td>
-                        <td className="mono xs">{o.misconception ?? "—"}</td>
+                        <td className="xs">{o.misconception ? labels.misconception(o.misconception) : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
               <KV rows={[
-                [t2("quality.links"), <span key="l" className="small">{it.objectives.map((o) => `${o.code} (${o.status})`).join(", ") || "—"} · {it.misconceptions.join(", ") || "—"}</span>],
+                [t2("quality.links"), <span key="l" className="small">{it.objectives.map((o) => labels.objective(o.code)).join(", ") || "—"} · {it.misconceptions.map(labels.misconception).join(", ") || "—"}</span>],
                 [t2("quality.denominators"), <span key="d" className="small">{(["present", "answered", "omitted", "missing"] as const).map((k) => `${t2(`quality.den.${k}`)} ${it.denominators[k]}`).join(" · ")}</span>],
               ]} />
               <ItemAdmins id={it.item_id} />

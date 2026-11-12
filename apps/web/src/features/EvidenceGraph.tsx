@@ -5,6 +5,7 @@ import { useI18n } from "../i18n/I18n";
 import type { DictKey, Lang } from "../i18n/dict";
 import { Badge, Button, Loading, type Tone } from "../ui";
 import { pct } from "../ui/format";
+import { useLabels } from "../ui/labels";
 import { SourceDialog } from "./SourceDialog";
 
 const LANES: GraphNode["kind"][] = ["prerequisite", "topic", "objective", "item", "misconception", "source", "hours", "decision", "followup"];
@@ -141,6 +142,7 @@ function at(obj: unknown, path: string): unknown {
 /** What a node is based on: the stored calculation, the answer rows, the page, the plan row or the decision. */
 export function NodeDetail({ node }: { node: GraphNode }) {
   const { t, lang } = useI18n();
+  const labels = useLabels();
   const [source, setSource] = useState<string | null>(null);
   const a = useAnalysis(node.open?.type === "calculation" || node.open?.type === "item" ? node.open.analysis_id : null);
   const label = lang === "kz" ? node.label_kz : node.label_ru;
@@ -162,15 +164,15 @@ export function NodeDetail({ node }: { node: GraphNode }) {
       {node.open?.type === "decision" && <Link to={`/decisions/${node.open.decision_id}`}>{t("graph.open_decision")}</Link>}
       {(node.open?.type === "calculation" || node.open?.type === "item") && (
         <div className="stack" style={{ gap: 4 }}>
-          <span className="xs muted">{t("graph.calc_from")} <code>{node.open.analysis_id?.slice(0, 8)}</code> · <code>{node.open.path}</code>
-            {a.data ? <> · {t("header.version")} v{a.data.context.dataset_version} · {a.data.context.method_version}</> : null}</span>
+          <details className="xs muted"><summary>{t("common.technical_details")}</summary>{t("graph.calc_from")} <code>{node.open.analysis_id?.slice(0, 8)}</code> · <code>{node.open.path}</code>
+            {a.data ? <> · {t("header.version")} v{a.data.context.dataset_version} · {a.data.context.method_version}</> : null}</details>
           {a.isLoading && <Loading />}
           {node.open.type === "item" && piece && typeof piece === "object" ? (
             <div className="table-wrap" tabIndex={0}><table className="table xs" data-testid="item-rows">
               <thead><tr><th>{t("graph.option")}</th><th>{t("graph.answer")}</th><th className="num">n</th><th className="num">%</th><th>{t("graph.kind.misconception")}</th></tr></thead>
               <tbody>
                 {((piece as { options: { key: string; text: string; correct: boolean; count: number; share: number | null; misconception: string | null }[] }).options).map((o) => (
-                  <tr key={o.key}><td>{o.key}{o.correct ? " ✓" : ""}</td><td>{o.text}</td><td className="num">{o.count}</td><td className="num">{pct(o.share, lang)}</td><td className="mono">{o.misconception ?? ""}</td></tr>
+                  <tr key={o.key}><td>{o.key}{o.correct ? " ✓" : ""}</td><td>{o.text}</td><td className="num">{o.count}</td><td className="num">{pct(o.share, lang)}</td><td>{labels.misconception(o.misconception)}</td></tr>
                 ))}
               </tbody>
             </table></div>

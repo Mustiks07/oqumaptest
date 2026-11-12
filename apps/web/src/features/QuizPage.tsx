@@ -8,6 +8,7 @@ import type { DictKey } from "../i18n/dict";
 import { useAppState } from "../state/AppState";
 import { Alert, Badge, Button, Card, EmptyState, ErrorState, Loading, Select } from "../ui";
 import { pct } from "../ui/format";
+import { useLabels } from "../ui/labels";
 
 const STATUS_TONE = { draft: "neutral", edited: "info", approved: "ok", rejected: "danger", preview: "synthetic" } as const;
 
@@ -159,6 +160,7 @@ export function QuizChecks({ quiz }: { quiz: Pick<Quiz, "checks"> }) {
 
 export function QuizItemView({ it, checks, editing = false, onStem, onVerify }: { it: QuizItem; checks: { code: string; passed: boolean; blocking: boolean; detail: string }[]; editing?: boolean; onStem?: (v: string) => void; onVerify?: (v: boolean) => void }) {
   const { t, lang } = useI18n();
+  const labels = useLabels();
   const failed = checks.filter((c) => !c.passed);
   return (
     <section className="quiz-item" aria-label={it.code}>
@@ -175,7 +177,7 @@ export function QuizItemView({ it, checks, editing = false, onStem, onVerify }: 
         {it.options.map((o) => (
           <li key={o.key}>
             <span className={o.correct ? "strong" : ""}>{o.text}{o.correct ? " ✓" : ""}</span>
-            <span className="xs muted"> — {lang === "kz" ? o.rationale_kz : o.rationale_ru}{o.misconception ? ` (${o.misconception})` : ""}</span>
+            <span className="xs muted"> — {lang === "kz" ? o.rationale_kz : o.rationale_ru}{o.misconception ? ` (${labels.misconception(o.misconception)})` : ""}</span>
           </li>
         ))}
       </ol>

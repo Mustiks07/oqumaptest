@@ -15,6 +15,7 @@ import type { DictKey } from "../i18n/dict";
 import { useAppState } from "../state/AppState";
 import { Alert, Badge, Button, ErrorState, Loading, ModeBadge } from "../ui";
 import { pct, pp } from "../ui/format";
+import { useLabels } from "../ui/labels";
 import { CouncilPanel } from "./Council";
 import { EvidenceGraph, NodeDetail } from "./EvidenceGraph";
 import { QuizChecks, QuizItemView } from "./QuizPage";
@@ -166,14 +167,14 @@ function OverviewStep({ topicId }: { topicId: string }) {
   const unmeasured = ov.data.result.topics.filter((x) => !x.score);
   return (
     <Frame
-      found={<p><strong>{row.code} {pick(row as unknown as Record<string, unknown>, "title")}</strong> — {pct(row.score?.mean, lang)} {t("tour.overview.found")}</p>}
+      found={<p><strong>{pick(row as unknown as Record<string, unknown>, "title")}</strong> — {pct(row.score?.mean, lang)} {t("tour.overview.found")}</p>}
       trust={<p className="small">{t("tour.overview.trust", { n: row.score?.n_learners ?? 0, c: row.score?.n_classes ?? 0, v: ov.data.context.dataset_version })}
-        {unmeasured.length > 0 && <> {t("tour.overview.unmeasured", { codes: unmeasured.map((x) => x.code).join(", ") })}</>}</p>}
+        {unmeasured.length > 0 && <> {t("tour.overview.unmeasured", { codes: unmeasured.map((x) => pick(x as unknown as Record<string, unknown>, "title")).join(", ") })}</>}</p>}
       next={<p className="small">{t("tour.overview.next")}</p>}>
       <div className="tour-bars">
         {ov.data.result.topics.map((x) => (
           <div key={x.topic_id} className={`tour-bar${x.topic_id === topicId ? " hl" : ""}`}>
-            <span className="mono xs">{x.code}</span>
+            <span className="xs">{pick(x as unknown as Record<string, unknown>, "title")}</span>
             <span className="bar"><span style={{ width: `${Math.round((x.score?.mean ?? 0) * 100)}%` }} /></span>
             <span className="xs">{x.score ? pct(x.score.mean, lang) : t(`status.${x.status}` as DictKey)}</span>
           </div>
@@ -206,6 +207,7 @@ function GraphStep({ topicId }: { topicId: string }) {
 
 function CompareStep({ topicId, editions }: { topicId: string; editions: string[] }) {
   const { t, lang } = useI18n();
+  const labels = useLabels();
   const { datasetId } = useAppState();
   const q = useQuery({
     queryKey: ["tour-compare", datasetId, topicId, editions.join()],
@@ -219,7 +221,7 @@ function CompareStep({ topicId, editions }: { topicId: string; editions: string[
   const flip = r.raw.difference != null && r.adjusted.difference != null && r.raw.difference * r.adjusted.difference < 0;
   return (
     <Frame
-      found={<p className="small">{t("tour.compare.found", { a: r.editions.a.code, b: r.editions.b.code, raw: pp(r.raw.difference, lang), adj: pp(r.adjusted.difference, lang) })}
+      found={<p className="small">{t("tour.compare.found", { a: labels.edition(r.editions.a.code), b: labels.edition(r.editions.b.code), raw: pp(r.raw.difference, lang), adj: pp(r.adjusted.difference, lang) })}
         {flip && <strong> {t("tour.compare.flip")}</strong>}</p>}
       trust={<p className="small">{t("tour.compare.trust")} {ci ? `95% ДИ: ${pp(ci.low, lang)} … ${pp(ci.high, lang)};` : ""} {t(`comparability.${r.status}` as DictKey)}.</p>}
       next={<p className="small">{t("tour.compare.next")}</p>}>
@@ -243,31 +245,34 @@ function CouncilStep({ topicId }: { topicId: string }) {
 
 function SandboxStep({ topicCode }: { topicCode: string }) {
   const { t } = useI18n();
+  const labels = useLabels();
   const { datasetId } = useAppState();
-  const text = `добавь 2 часа на ${topicCode} за счёт T7`;
+  const targetName = labels.topic(topicCode);
+  const donorName = labels.topic("T7");
+  const text = `добавь 2 часа на ${targetName} за счёт темы «${donorName}»`;
   const q = useQuery({
     queryKey: ["tour-sandbox", datasetId, text],
     queryFn: async () => {
       const pv = await api.post<IntentPreview>("/api/v1/sandbox/intent", { dataset_id: datasetId, text });
       const res = await api.post<Envelope<SandboxResult>>("/api/v1/sandbox/run", { dataset_id: datasetId,
-        scenarios: [{ name: `A: ${topicCode} +2`, ops: pv.all_ops }, { name: `B: ${topicCode} = 30`, ops: [{ op: "set", topic: topicCode, value: 30 }] }] });
+        scenarios: [{ name: "Перенести 2 часа", ops: pv.all_ops }, { name: "Задать 30 часов", ops: [{ op: "set", topic: topicCode, value: 30 }] }] });
       return { pv, res: res.result };
     },
   });
   if (q.isError) return <ErrorState error={q.error} />;
   if (!q.data) return <Loading />;
-  const { pv, res } = q.data;
+  const { res } = q.data;
   const [a, b] = res.scenarios;
   return (
     <Frame
-      found={<p className="small">«{text}» → <code>{pv.ops.map((o) => `${o.op} ${o.topic ?? ""} ${o.value ?? ""}`).join("; ")}</code>. {t("tour.sandbox.found", { before: res.before.hours[topicCode], after: a.hours?.[topicCode] ?? "—" })}</p>}
+      found={<p className="small">«{text}». {t("tour.sandbox.found", { before: res.before.hours[topicCode], after: a.hours?.[topicCode] ?? "—" })}</p>}
       trust={<p className="small">{t("tour.sandbox.trust")} {b.status === "infeasible" ? t("tour.sandbox.conflict") : ""}</p>}
       next={<p className="small">{t("tour.sandbox.next")}</p>}>
       <table className="table xs" data-testid="tour-sandbox">
         <thead><tr><th /><th className="num">{t("sandbox.before")}</th>{res.scenarios.map((s) => <th key={s.name} className="num">{s.name}</th>)}</tr></thead>
         <tbody>
           {res.topics.map((tp) => (
-            <tr key={tp.code}><td>{tp.code}</td><td className="num">{res.before.hours[tp.code]}</td>{res.scenarios.map((s) => <td key={s.name} className="num">{s.hours?.[tp.code] ?? "—"}</td>)}</tr>
+            <tr key={tp.code}><td>{labels.topic(tp.code)}</td><td className="num">{res.before.hours[tp.code]}</td>{res.scenarios.map((s) => <td key={s.name} className="num">{s.hours?.[tp.code] ?? "—"}</td>)}</tr>
           ))}
           <tr><td>{t("sandbox.status")}</td><td />{res.scenarios.map((s) => <td key={s.name} className="num">{s.status_message_ru}</td>)}</tr>
         </tbody>

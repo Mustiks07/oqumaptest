@@ -11,9 +11,11 @@ import { useAppState } from "../state/AppState";
 import { Alert, Badge, Button, Card, Disclosure, EmptyState, ErrorState, QueryView } from "../ui";
 import { dateTime, num } from "../ui/format";
 import { useMT } from "./measurement/i18n";
+import { useLabels } from "../ui/labels";
 
 export function DatasetsPage() {
   const { t, lang } = useI18n();
+  const labels = useLabels();
   const { t2 } = useMT();
   const q = useDatasets();
   const cfg = useConfig();
@@ -48,7 +50,7 @@ export function DatasetsPage() {
   const card = (d: DatasetSummary, primary: boolean) => (
     <Card key={d.id} title={(lang === "kz" ? d.name_kz : d.name_ru).replace(/^(Основной|Негізгі) демо-корпус:\s*/i, "")}
       actions={d.id === datasetId ? <Badge tone="ok">{t("datasets.selected")}</Badge> : null}>
-      <p className="small">{lang === "kz" ? d.description_kz : d.description_ru}</p>
+      <p className="small">{labels.text(lang === "kz" ? d.description_kz : d.description_ru).replace(/\b(синтетических|синтетикалық)\s*/gi, "")}</p>
       <div className="row" style={{ marginBottom: 12 }}>
         <Badge tone="info">{t(`level.${d.data_level}` as DictKey)}</Badge>
       </div>

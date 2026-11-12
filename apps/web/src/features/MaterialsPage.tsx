@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { pollJob, useCurriculum, useDocument, useDocuments, useItemLinks, useReview, useSearch } from "../api/hooks";
@@ -7,9 +8,11 @@ import { useI18n } from "../i18n/I18n";
 import type { DictKey } from "../i18n/dict";
 import { Alert, Badge, Button, Card, EmptyState, ErrorState, Field, Loading, QueryView, Select, StatusBadge, Tabs } from "../ui";
 import { SourceDialog } from "./SourceDialog";
+import { useLabels } from "../ui/labels";
 
 export function MaterialsPage() {
   const { t } = useI18n();
+  const nav = useNavigate();
   const [tab, setTab] = useState("documents");
   return (
     <div className="page stack">
@@ -18,6 +21,7 @@ export function MaterialsPage() {
           <h1>{t("materials.title")}</h1>
           <p className="muted">{t("materials.lead")}</p>
         </div>
+        <Button variant="primary" onClick={() => nav("/planner")}>{t("topic.to_plan")}</Button>
       </div>
       <Tabs label={t("materials.title")} active={tab} onChange={setTab}
         tabs={[{ id: "documents", label: t("materials.documents") }, { id: "items", label: t("materials.items") }, { id: "search", label: t("materials.search") }]} />
@@ -30,6 +34,7 @@ export function MaterialsPage() {
 
 function Documents() {
   const { t } = useI18n();
+  const labels = useLabels();
   const docs = useDocuments();
   const cur = useCurriculum();
   const [selected, setSelected] = useState<string | null>(null);
@@ -49,9 +54,9 @@ function Documents() {
                     <li key={d.id}>
                       <button type="button" className={`btn ${selected === d.id ? "btn-primary" : ""}`} style={{ width: "100%", justifyContent: "flex-start", whiteSpace: "normal", textAlign: "left", minHeight: 48 }} onClick={() => setSelected(d.id)} data-testid={`doc-${d.filename}`}>
                         <span>
-                          <strong>{ed?.title ?? d.filename}</strong>
+                          <strong>{labels.edition(ed?.id ?? d.edition_id)}</strong>
                           <br />
-                          <span className="xs">{d.filename} · v{d.version} · {d.status}</span>
+                          <span className="xs muted">{d.page_count ?? "—"} {t("materials.pages")}</span>
                         </span>
                       </button>
                     </li>
@@ -115,6 +120,7 @@ function Upload({ onUploaded }: { onUploaded: (id: string) => void }) {
 
 function DocumentView({ id }: { id: string }) {
   const { t } = useI18n();
+  const labels = useLabels();
   const q = useDocument(id);
   const review = useReview();
   const qc = useQueryClient();
@@ -127,7 +133,7 @@ function DocumentView({ id }: { id: string }) {
         d.links.forEach((l) => byFrag.set(l.fragment_id, [...(byFrag.get(l.fragment_id) ?? []), l]));
         const report = d.document.extraction_report as { pages_without_text?: number[] };
         return (
-          <Card title={d.document.filename} actions={
+          <Card title={labels.edition(d.document.edition_id)} actions={
             <Button size="sm" disabled={proposing} onClick={async () => {
               setProposing(true);
               try { await api.post(`/api/v1/documents/${id}/propose-links`); await qc.invalidateQueries({ queryKey: ["document", id] }); } finally { setProposing(false); }
@@ -137,9 +143,8 @@ function DocumentView({ id }: { id: string }) {
               <Badge>v{d.document.version}</Badge>
               <Badge>{d.document.media_type.includes("pdf") ? "PDF" : "DOCX"}</Badge>
               {d.document.page_count != null && <Badge>{d.document.page_count} стр.</Badge>}
-              {d.document.is_demo && <Badge tone="synthetic">demo</Badge>}
-              <span className="xs muted">sha256 <code>{d.document.sha256.slice(0, 12)}…</code></span>
             </div>
+            <details className="xs muted" style={{ marginBottom: 8 }}><summary>{t("common.technical_details")}</summary>{d.document.filename} · v{d.document.version} · {d.document.status} · sha256 {d.document.sha256.slice(0, 12)}…</details>
             {d.document.ocr_status === "unavailable" ? (
               <Alert tone="warn">{t("materials.ocr.unavailable")} {report.pages_without_text?.length ? `(стр.: ${report.pages_without_text.join(", ")})` : ""}</Alert>
             ) : (
@@ -152,7 +157,7 @@ function DocumentView({ id }: { id: string }) {
                   <div className="spread xs muted">
                     <span>
                       {f.page_physical != null ? `${t("materials.page_physical")} ${f.page_physical}` : ""}
-                      {f.page_printed ? ` · ${t("materials.page")} ${f.page_printed}` : ""} · {t("materials.anchor")} <code>{f.anchor}</code>
+                      {f.page_printed ? ` · ${t("materials.page")} ${f.page_printed}` : ""}
                     </span>
                     <Button size="sm" variant="ghost" onClick={() => setSource(f.id)}>{t("common.open")}</Button>
                   </div>
@@ -160,7 +165,7 @@ function DocumentView({ id }: { id: string }) {
                   {(byFrag.get(f.id) ?? []).map((l) => (
                     <div key={l.link_id} className="spread" style={{ marginTop: 6, background: "var(--color-surface-muted)", padding: 6, borderRadius: 6 }}>
                       <span className="small">
-                        <code>{l.objective_code}</code> {l.objective_text_ru} <Badge>{t(`origin.${l.origin}` as DictKey)}</Badge>
+                        {labels.objective(l.objective_code)} <Badge>{t(`origin.${l.origin}` as DictKey)}</Badge>
                         {l.rationale && <span className="xs muted"> · {l.rationale}</span>}
                       </span>
                       <span className="row" style={{ gap: 4 }}>
@@ -191,6 +196,7 @@ function ItemLinks() {
   const q = useItemLinks();
   const review = useReview();
   const [onlyProposed, setOnlyProposed] = useState(true);
+  const labels = useLabels();
   return (
     <Card title={t("materials.items")}>
       <Alert tone="warn">{t("materials.items_note")}</Alert>
@@ -206,8 +212,8 @@ function ItemLinks() {
                 <tbody>
                   {rows.map((l) => (
                     <tr key={l.link_id}>
-                      <td><code>{l.item_code}</code> <span className="small">{l.stem_ru}</span></td>
-                      <td><code>{l.objective_code}</code> <span className="xs">{l.objective_text_ru}</span></td>
+                      <td><span className="small">{l.stem_ru}</span></td>
+                      <td><span className="small">{labels.objective(l.objective_code)}</span></td>
                       <td className="num">{l.weight.toFixed(2)}</td>
                       <td className="xs">{t(`origin.${l.origin}` as DictKey)}</td>
                       <td><StatusBadge status={l.status} labelKey={`link.${l.status}` as DictKey} /></td>
