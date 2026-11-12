@@ -132,6 +132,17 @@ npm run dev
 Windows PowerShell: `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1`  
 Linux/macOS: `scripts/dev.sh`
 
+Если PostgreSQL и Docker не установлены, используйте локальную SQLite-сборку (данные хранятся только на этом
+компьютере в `apps/api/oqumap-demo.db`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev-sqlite.ps1
+```
+
+При первом запуске скрипт безопасно запросит Gemini API key: ввод не показывается и не сохраняется в истории
+терминала. Затем он сам подготовит Python 3.12, миграции, демо-данные и запустит API вместе с интерфейсом на
+[http://localhost:5173](http://localhost:5173). Требуются только Git, Node.js 20+ и `uv`.
+
 </details>
 
 ## ИИ, которому не отдают право на цифры
@@ -142,8 +153,8 @@ OquMap полностью работает без API-ключа: аналити
 
 ```env
 OQUMAP_LLM_PROVIDER=gemini
-OQUMAP_LLM_MODEL=gemini-3.8-flash
-OQUMAP_LLM_FALLBACK_MODEL=gemini:gemini-3.5-flash-lite
+OQUMAP_LLM_MODEL=gemini-3.5-flash
+OQUMAP_LLM_FALLBACKS=["gemini:gemini-3.1-flash-lite","gemini:gemini-3.5-flash-lite"]
 OQUMAP_GEMINI_API_KEY=<server-only-key>
 OQUMAP_LLM_REAL_DATA_ALLOWED=false
 ```
