@@ -37,6 +37,7 @@ from ..services import (
 )
 from ..services.auth import Principal
 from ..services.calendar import CalendarRequest as CalendarRequestModel
+from ..services.labels import edition_name
 from ..services.quizzes import EditReq as QuizEditReq
 from ..services.quizzes import GenerateReq as QuizGenerateReq
 from ..services.quizzes import ReviewReq as QuizReviewReq
@@ -360,7 +361,8 @@ def curriculum(dataset_id: str, p: P, session: DB) -> dict[str, Any]:
         "relations": [{"source": r.source_objective_id, "target": r.target_objective_id, "type": r.relation_type,
                        "confirmed": r.confirmed} for r in rels],
         "editions": [{"id": e.id, "code": e.code, "title": e.title, "edition_label": e.edition_label, "year": e.year,
-                      "language": e.language, "is_demo": e.is_demo, "document_id": e.document_id}
+                      "language": e.language, "is_demo": e.is_demo, "document_id": e.document_id,
+                      "name_ru": edition_name(e.title, e.code, "ru"), "name_kz": edition_name(e.title, e.code, "kz")}
                      for e in meta.editions.values()],
         "schools": sorted([{"id": s.id, "code": s.code, "name": s.name} for s in meta.schools.values()], key=lambda x: x["code"]),
         "cohorts": sorted([{"id": c.id, "code": c.code, "school_id": c.school_id, "language": c.language,
@@ -405,6 +407,32 @@ def validate_graph_selection(body: GraphSelection, p: P, session: DB) -> dict[st
 def comparison(body: an.ComparisonRequest, p: P, session: DB):
     ratelimit.check(session, "compute", p.user_id, "rate_compute")
     return an.comparison(session, p.org_id, body, p.user_id)
+
+
+class EditionSummaryRequest(BaseModel):
+    dataset_id: str
+    edition_a_id: str | None = None
+    edition_b_id: str | None = None
+    filters: an.Filters = Field(default_factory=an.Filters)
+    strata_scheme: str = "pre_three_level"
+    weight_mode: str = "pooled"
+
+
+@router.post("/comparisons/summary", response_model=S.Envelope[S.EditionSummaryResult], tags=["analyses"])
+def comparison_summary(body: EditionSummaryRequest, p: P, session: DB):
+    """Every topic of the programme compared for two editions, with a verdict computed from the rows."""
+    from ..services import edition_summary as es
+
+    ratelimit.check(session, "compute", p.user_id, "rate_compute")
+    meta = an.load_meta(session, p.org_id, body.dataset_id)
+    a, b = body.edition_a_id, body.edition_b_id
+    if not a or not b:
+        a, b = es.default_editions(meta)
+    if not a or not b or not meta.topics:
+        raise ApiError("fewer_than_two_editions", "В наборе меньше двух изданий для сравнения", 422)
+    req = an.ComparisonRequest(dataset_id=body.dataset_id, topic_id=meta.topics[0].id, edition_a_id=a, edition_b_id=b,
+                               filters=body.filters, strata_scheme=body.strata_scheme, weight_mode=body.weight_mode)
+    return es.summary(session, p.org_id, req, p.user_id)
 
 
 @router.get("/analyses/{analysis_id}", tags=["analyses"])

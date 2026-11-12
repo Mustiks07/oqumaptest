@@ -82,7 +82,7 @@ def test_council_rejects_invented_ids_and_numbers_from_a_model(client, H, datase
 
     def fake_live(task, system, user, schema, synthetic=True):
         if task == "council_analyst":
-            return {"claims": [{"kind": "level", "text": "Тема провалена: 12% учеников.", "evidence_ids": ["fact:topic_level"]},
+            return {"claims": [{"kind": "level", "text": "Тема провалена: 4321% учеников.", "evidence_ids": ["fact:topic_level"]},
                                {"kind": "level", "text": "Всё плохо.", "evidence_ids": ["fact:invented"]}]}, \
                 {"mode": "live_model", "provider": "fake", "model": "fake-1"}
         return None, {"fallback_reason": "model_not_configured", "provider": "none", "model": None}
@@ -92,7 +92,7 @@ def test_council_rejects_invented_ids_and_numbers_from_a_model(client, H, datase
     out = client.post("/api/v1/ai/council", json={"dataset_id": datasets["base"]["id"], "topic_id": t3["id"]}, headers=H).json()["output"]
     reasons = [v["reasons"] for v in out["verdicts"] if v["role"] == "analyst"]
     assert ["unverified_numbers"] in reasons and ["unknown_evidence_ids"] in reasons
-    assert "fact:invented" not in out["final"]["evidence_ids"] and "12%" not in out["final"]["claim"]
+    assert "fact:invented" not in out["final"]["evidence_ids"] and "4321%" not in out["final"]["claim"]
 
 
 def test_sandbox_intent_to_typed_ops_with_diff():

@@ -18,7 +18,8 @@ PREVIOUS = "d964e255551f"
 MEASUREMENT = "c2a7e5f1b3d9"
 MEASUREMENT_HEAD = "b5e7f0a2d4c6"  # last revision of the measurement branch (Claude 2, round 2)
 PLATFORM_HEAD = "d5085df1f375"  # last revision of the platform branch (Claude 1: demo tenants, quizzes)
-HEAD = "6e837767b573"  # merge revision of both branches
+MERGE = "6e837767b573"  # merge revision of both branches
+HEAD = "7a1c2e9d4b60"  # current single head: teaching plan names in Kazakh (after the merge)
 NEW_TABLES = {"interventions", "intervention_versions", "intervention_targets", "pilots", "pilot_cohorts", "pilot_events",
               "fidelity_logs", "pilot_outcomes", "pilot_conclusions", "intervention_evidence", "assessment_cohorts", "pilot_sessions", "pilot_session_events"}
 
@@ -111,7 +112,7 @@ def test_upgrade_from_platform_head_keeps_quizzes_and_rate_limits():
     with eng.connect() as conn:
         assert conn.execute(text("SELECT count FROM rate_limits WHERE key = 'login:ip:1'")).scalar() == 3
     # the merge revision is reversible: one step down leaves both branch heads applied, upgrade returns to one head
-    command.downgrade(cfg, MEASUREMENT_HEAD)  # removes only the merge revision
+    command.downgrade(cfg, MEASUREMENT_HEAD)  # removes the revisions after both branch heads (merge + plan KZ names)
     with eng.connect() as conn:
         assert {r[0] for r in conn.execute(text("SELECT version_num FROM alembic_version"))} == {PLATFORM_HEAD, MEASUREMENT_HEAD}
     command.upgrade(cfg, "head")

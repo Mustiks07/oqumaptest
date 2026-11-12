@@ -316,7 +316,9 @@ def _seed_plan(session: Session, ds: m.Dataset) -> None:
     plan = m.TeachingPlan(id=stable_id(DEMO_ORG_ID, "plan", "base", "1"), org_id=DEMO_ORG_ID, dataset_id=ds.id,
                           plan_group_id=group, version=1, name="Действующий план часов по темам (условный)",
                           scope="6 класс, все классы набора", horizon="2026–2027 учебный год (по состоянию на 11.11.2026)",
-                          status="current")
+                          name_kz="Тақырыптар бойынша сағаттардың қолданыстағы жоспары (шартты)",
+                          scope_kz="6-сынып, жиынның барлық сыныптары",
+                          horizon_kz="2026–2027 оқу жылы (11.11.2026 жағдай бойынша)", status="current")
     session.add(plan)
     session.flush()
     for code, (planned, elapsed, lo, hi) in PLAN_HOURS.items():

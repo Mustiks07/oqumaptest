@@ -117,6 +117,8 @@ def plan_context(session: Session, org_id: str, dataset_id: str, filters: an.Fil
                     source["priority_basis"] = "prerequisite_support"
     return {
         "plan": None if plan is None else {"id": plan.id, "name": plan.name, "scope": plan.scope, "horizon": plan.horizon,
+                                           "name_kz": plan.name_kz or plan.name, "scope_kz": plan.scope_kz or plan.scope,
+                                           "horizon_kz": plan.horizon_kz or plan.horizon,
                                            "version": plan.version, "status": plan.status, "plan_group_id": plan.plan_group_id},
         "topics": topics,
         "budget": sum(t["current_hours"] for t in topics),
@@ -170,6 +172,11 @@ def solve(session: Session, org_id: str, req: PlanSolveRequest, user_id: str | N
         time_limit_seconds=req.time_limit_seconds,
     )
 
+    # human names for conflict texts: trusted programme titles, otherwise the title sent with the topic block
+    names = {t["code"]: (t["title_ru"], t["title_kz"]) for t in trusted_context["topics"]}
+    for t in req.topics:
+        names.setdefault(t.code, (t.title or t.code, t.title or t.code))
+
     def compute():
         scenarios = []
         for name in req.presets:
@@ -185,7 +192,7 @@ def solve(session: Session, org_id: str, req: PlanSolveRequest, user_id: str | N
                     res["minimal_change_retry"] = True
             res["preset"] = name
             res["status_message_ru"], res["status_message_kz"] = PLAN_STATUS[res["status"]]
-            if res.get("validation", {}).get("valid"):
+            if (res.get("validation") or {}).get("valid"):
                 res["verdict_ru"] = "Оптимальный план, ограничения проверены" if res["status"] == "optimal" else "Допустимый план, ограничения проверены"
                 res["verdict_kz"] = "Оңтайлы жоспар, шектеулер тексерілді" if res["status"] == "optimal" else "Жарамды жоспар, шектеулер тексерілді"
                 res["human_status"] = "ready"
@@ -200,7 +207,10 @@ def solve(session: Session, org_id: str, req: PlanSolveRequest, user_id: str | N
                 "minimal_change_retry": res.get("minimal_change_retry", False),
             }
             if res.get("conflict"):
-                res["conflict"]["constraints"] = [label_constraint(c) for c in res["conflict"]["constraints"]]
+                res["conflict"]["constraints"] = [
+                    label_constraint({**c, "topic_title_ru": names.get(c.get("topic_code"), (None, None))[0],
+                                      "topic_title_kz": names.get(c.get("topic_code"), (None, None))[1]})
+                    for c in res["conflict"]["constraints"]]
             scenarios.append(res)
         return {"scenarios": scenarios, "budget": req.budget, "is_calendar": False,
                 "input": {"topics": [t.model_dump() for t in req.topics], "change_penalty": req.change_penalty,

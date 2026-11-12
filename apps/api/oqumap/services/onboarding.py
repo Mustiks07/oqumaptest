@@ -558,7 +558,8 @@ def _c_program(session, dataset, batch, rows) -> dict:
     if any("hours_current" in h for h in hours.values()):
         plan = m.TeachingPlan(org_id=dataset.org_id, dataset_id=dataset.id, plan_group_id=new_id(), version=1,
                               name="Действующий план часов (импорт)", scope=dataset.name_ru, horizon="из файла программы",
-                              status="current")
+                              name_kz="Сағаттардың қолданыстағы жоспары (импорт)", scope_kz=dataset.name_kz,
+                              horizon_kz="бағдарлама файлынан", status="current")
         session.add(plan)
         session.flush()
         for tc, h in hours.items():

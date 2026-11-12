@@ -72,7 +72,7 @@ class AnalysisContext(Model):
     method_version: str
     code_version: str
     computed_at: str
-    kind: Literal["overview", "topic_evidence", "comparison", "plan", "follow_up"]
+    kind: Literal["overview", "topic_evidence", "comparison", "edition_summary", "plan", "follow_up"]
 
 
 class Envelope(Model, Generic[T]):
@@ -270,6 +270,65 @@ class ComparisonResult(Model):
     editions: dict[str, Any]
     forms: dict[str, list[str]]
     topic_table: dict[str, Any] | None = None
+
+
+class EditionSummaryEdition(Model):
+    id: str
+    code: str
+    title: str
+    name_ru: str
+    name_kz: str
+
+
+class EditionSummaryRow(Model):
+    topic_id: str
+    code: str
+    title_ru: str
+    title_kz: str
+    status: Literal["comparable", "limited", "not_comparable"]
+    status_label_ru: str
+    status_label_kz: str
+    raw_a: float | None
+    raw_b: float | None
+    raw_difference: float | None
+    adjusted_a: float | None
+    adjusted_b: float | None
+    adjusted_difference: float | None
+    ci: dict[str, float] | None
+    ci_unavailable_reason: str | None
+    signal: str
+    favoured: Literal["a", "b"] | None
+    confirmed: bool
+    n: dict[str, dict[str, int]]
+    reasons: list[Reason]
+
+
+class EditionVerdict(Model):
+    kind: Literal["topic_dependent", "a_ahead", "b_ahead", "no_confirmed_difference", "insufficient"]
+    a_topics: list[str]
+    b_topics: list[str]
+    unclear_topics: list[str]
+    not_compared_topics: list[str]
+    raw_a_ahead_topics: list[str]
+    raw_b_ahead_topics: list[str]
+    raw_misleading: bool
+    text_ru: str
+    text_kz: str
+    detail_ru: str
+    detail_kz: str
+    raw_story_ru: str | None
+    raw_story_kz: str | None
+
+
+class EditionSummaryResult(Model):
+    method_version: str
+    comparison_method_version: str
+    editions: dict[str, EditionSummaryEdition]
+    rows: list[EditionSummaryRow]
+    verdict: EditionVerdict
+    exploratory: bool
+    strata_scheme: str
+    weight_mode: str
 
 
 class PlanChange(Model):

@@ -1,7 +1,8 @@
 """Evidence graph: one verifiable chain from a weak topic to the decision and its follow-up.
 
-topic → prerequisite objectives → objectives → items → misconception hypotheses → edition pages (sources)
-→ planned hours → decisions → follow-up checks.
+topic → prerequisite objectives → objectives → items → misconception hypotheses → edition comparison for the topic
+→ edition pages (sources; the edition that is stronger in this topic first) → planned hours → decisions → follow-up checks.
+Labels carry human names only; internal codes stay in the ``code`` field of a node.
 
 Every node points to something that can be opened and checked: a stored analysis run plus a JSON path (the
 calculation), a source fragment (the page), an item with its answer distribution (the rows), a plan row or a
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 from .. import models as m
 from ..errors import ApiError
 from . import analysis as an
+from .labels import edition_name
 
 GAP_TEXT = {
     "prerequisite_not_measured": ("Пререквизит не измерен на итоговых формах", "Пререквизит қорытынды формаларда өлшенбеген"),
@@ -48,7 +50,7 @@ def build(session: Session, org_id: str, dataset_id: str, topic_id: str, f: an.F
 
     t = res["topic"]
     tnode = f"topic:{t['topic_id']}"
-    nodes.append({"id": tnode, "kind": "topic", "label_ru": f"{t['code']} {t['title_ru']}", "label_kz": f"{t['code']} {t['title_kz']}",
+    nodes.append({"id": tnode, "kind": "topic", "code": t["code"], "label_ru": t["title_ru"], "label_kz": t["title_kz"],
                   "status": res["status"], "metrics": {"mean": (res["summary"] or {}).get("mean"),
                                                        "n_learners": (res["summary"] or {}).get("n_learners"),
                                                        "n_classes": (res["summary"] or {}).get("n_classes")},
@@ -60,7 +62,7 @@ def build(session: Session, org_id: str, dataset_id: str, topic_id: str, f: an.F
 
     for i, pr in enumerate(res["prerequisites"]):
         nid = f"prereq:{pr['objective_id']}"
-        nodes.append({"id": nid, "kind": "prerequisite", "label_ru": f"{pr['code']} {pr['text_ru']}", "label_kz": f"{pr['code']} {pr['text_kz']}",
+        nodes.append({"id": nid, "kind": "prerequisite", "code": pr["code"], "label_ru": pr["text_ru"], "label_kz": pr["text_kz"],
                       "status": "measured" if pr["score"] else "not_measured", "metrics": {"mean": (pr["score"] or {}).get("mean")},
                       "open": {"type": "calculation", "analysis_id": aid, "path": f"prerequisites[{i}]"}})
         target = next((o for o in res["objectives"] if o["code"] == pr["target_code"]), None)
@@ -70,13 +72,47 @@ def build(session: Session, org_id: str, dataset_id: str, topic_id: str, f: an.F
             nodes.append(g)
             edge(nid, g["id"], "gap")
 
+    # programme-wide edition comparison: which edition is stronger in this topic (computed, cached as an analysis)
+    favoured_code = None
+    try:
+        from . import edition_summary as es
+
+        summ = es.for_dataset(session, org_id, dataset_id, f.model_copy(), user_id)
+    except ApiError:
+        summ = None
+    if summ is not None:
+        idx, row = next(((i, r) for i, r in enumerate(summ["result"]["rows"]) if r["topic_id"] == t["topic_id"]), (None, None))
+        if row is not None:
+            eds = summ["result"]["editions"]
+            fav = eds.get(row["favoured"]) if row["favoured"] else None
+            other = eds["a" if row["favoured"] == "b" else "b"] if fav else None
+            favoured_code = fav["code"] if fav else None
+            diff = row["adjusted_difference"]
+            pp = None if diff is None else f"{100 * abs(diff):.1f}".replace(".", ",")
+            if fav:
+                label_ru = f"{fav['name_ru']} сильнее в этой теме: +{pp} п.п. к «{other['name_ru']}» после учёта входного уровня"
+                label_kz = f"{fav['name_kz']} бұл тақырыпта күштірек: кіріс деңгейін ескергенде +{pp} п.т."
+                status = "measured"
+            elif row["status"] == "not_comparable":
+                label_ru, label_kz, status = "Пособия по этой теме сравнить нельзя", "Бұл тақырып бойынша құралдарды салыстыру мүмкін емес", "gap"
+            else:
+                label_ru = "Различие пособий в этой теме данными не подтверждается"
+                label_kz = "Бұл тақырыпта құралдар арасындағы айырма деректермен расталмайды"
+                status = "measured"
+            cid = f"comparison:{t['topic_id']}"
+            nodes.append({"id": cid, "kind": "comparison", "label_ru": label_ru, "label_kz": label_kz, "status": status,
+                          "metrics": {"adjusted_difference": diff, "ci": row["ci"], "favoured": favoured_code,
+                                      "verdict_ru": summ["result"]["verdict"]["text_ru"], "verdict_kz": summ["result"]["verdict"]["text_kz"]},
+                          "open": {"type": "calculation", "analysis_id": summ["context"]["analysis_id"], "path": f"rows[{idx}]"}})
+            edge(tnode, cid, "compared")
+
     sources_by_obj: dict[str, list[dict]] = {}
     for s in res["sources"]:
         sources_by_obj.setdefault(s["objective_code"], []).append(s)
     item_by_code = {it["code"]: it for it in res["items"]}
     for i, o in enumerate(res["objectives"]):
         nid = f"objective:{o['objective_id']}"
-        nodes.append({"id": nid, "kind": "objective", "label_ru": f"{o['code']} {o['text_ru']}", "label_kz": f"{o['code']} {o['text_kz']}",
+        nodes.append({"id": nid, "kind": "objective", "code": o["code"], "label_ru": o["text_ru"], "label_kz": o["text_kz"],
                       "status": o["status"], "metrics": {"mean": (o["score"] or {}).get("mean"), "n_items_confirmed": o["n_items_confirmed"],
                                                          "n_items_proposed": o["n_items_proposed"]},
                       "open": {"type": "calculation", "analysis_id": aid, "path": f"objectives[{i}]"}})
@@ -90,13 +126,20 @@ def build(session: Session, org_id: str, dataset_id: str, topic_id: str, f: an.F
             nodes.append(g)
             edge(nid, g["id"], "gap")
         srcs = [s for s in sources_by_obj.get(o["code"], []) if s["status"] == "confirmed"] or sources_by_obj.get(o["code"], [])
+        # the edition that the programme-wide comparison found stronger for this topic is offered first
+        srcs = sorted(srcs, key=lambda s: s["edition_code"] != favoured_code) if favoured_code else srcs
         for s in srcs[:4]:
             sid = f"source:{s['source_id']}"
             if not any(n["id"] == sid for n in nodes):
                 page = s["page_printed"] or s["page_physical"]
-                nodes.append({"id": sid, "kind": "source", "label_ru": f"{s['edition_title']} · с. {page}" if page else s["edition_title"],
-                              "label_kz": f"{s['edition_title']} · б. {page}" if page else s["edition_title"],
-                              "status": s["status"], "metrics": {"edition_code": s["edition_code"], "page": page},
+                ed_ru = edition_name(s["edition_title"], s["edition_code"], "ru")
+                ed_kz = edition_name(s["edition_title"], s["edition_code"], "kz")
+                snippet = s["excerpt"].split(".")[0][:48]
+                nodes.append({"id": sid, "kind": "source", "code": s["edition_code"],
+                              "label_ru": f"{ed_ru} · с. {s['page_printed']}" if s["page_printed"] else f"{ed_ru} · «{snippet}»",
+                              "label_kz": f"{ed_kz} · {s['page_printed']}-б." if s["page_printed"] else f"{ed_kz} · «{snippet}»",
+                              "status": s["status"], "metrics": {"edition_code": s["edition_code"], "page": page,
+                                                                 "stronger_edition": s["edition_code"] == favoured_code},
                               "excerpt": s["excerpt"], "open": {"type": "source", "source_id": s["source_id"]}})
             edge(nid, sid, "taught_in")
         if not srcs:
@@ -106,7 +149,7 @@ def build(session: Session, org_id: str, dataset_id: str, topic_id: str, f: an.F
 
     for i, it in enumerate(res["items"]):
         nid = f"item:{it['item_id']}"
-        nodes.append({"id": nid, "kind": "item", "label_ru": f"{it['code']}: {it['stem_ru'][:80]}", "label_kz": f"{it['code']}: {it['stem_kz'][:80]}",
+        nodes.append({"id": nid, "kind": "item", "code": it["code"], "label_ru": it["stem_ru"][:80], "label_kz": it["stem_kz"][:80],
                       "status": "measured", "metrics": {"p_correct": it["p_correct"], "n_answered": it["n_answered"], "omit_rate": it["omit_rate"]},
                       "open": {"type": "item", "analysis_id": aid, "path": f"items[{i}]"}})
         for ol in it["objectives"]:
@@ -132,7 +175,7 @@ def build(session: Session, org_id: str, dataset_id: str, topic_id: str, f: an.F
     if row is not None:
         hid = f"hours:{row.id}"
         nodes.append({"id": hid, "kind": "hours", "label_ru": f"{row.planned_hours} ч в плане «{plan.name}»",
-                      "label_kz": f"«{plan.name}» жоспарында {row.planned_hours} сағ", "status": plan.status,
+                      "label_kz": f"«{plan.name_kz or plan.name}» жоспарында {row.planned_hours} сағ", "status": plan.status,
                       "metrics": {"planned_hours": row.planned_hours, "elapsed_hours": row.elapsed_hours, "min_hours": row.min_hours,
                                   "max_hours": row.max_hours},
                       "open": {"type": "plan", "plan_id": plan.id, "plan_version": plan.version}})
@@ -196,6 +239,7 @@ def _weak_path(res: dict, nodes: list[dict], edges: list[dict]) -> list[str]:
         path.append(items[0])
         mis = [e["to"] for e in edges if e["from"] == items[0] and e["kind"] == "signals"]
         path += mis[:1]
+    path += [e["to"] for e in edges if e["from"] == path[0] and e["kind"] == "compared"][:1]
     after_obj = [e["to"] for e in edges if e["from"] == oid and e["kind"] in ("taught_in", "gap")]
     path += after_obj[:1]
     def first(src: str, kinds: tuple[str, ...], last: bool = False) -> str | None:

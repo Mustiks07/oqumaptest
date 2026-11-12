@@ -8,22 +8,22 @@ from __future__ import annotations
 
 REASONS: dict[str, tuple[str, str]] = {
     "edition_confounded_with_teacher": (
-        "Издание {arm_code} используют классы только одного учителя: влияние пособия неотделимо от влияния учителя. Рейтинг недопустим.",
-        "{arm_code} басылымын тек бір мұғалімнің сыныптары қолданады: құрал әсерін мұғалім әсерінен ажырату мүмкін емес. Рейтинг жасауға болмайды.",
+        "Издание «{arm_code}» используют классы только одного учителя: влияние пособия неотделимо от влияния учителя. Рейтинг недопустим.",
+        "«{arm_code}» басылымын тек бір мұғалімнің сыныптары қолданады: құрал әсерін мұғалім әсерінен ажырату мүмкін емес. Рейтинг жасауға болмайды.",
     ),
     "edition_confounded_with_school": (
-        "Издание {arm_code} используется только в одной школе: влияние пособия неотделимо от влияния школы.",
-        "{arm_code} басылымы тек бір мектепте қолданылады: құрал әсерін мектеп әсерінен ажырату мүмкін емес.",
+        "Издание «{arm_code}» используется только в одной школе: влияние пособия неотделимо от влияния школы.",
+        "«{arm_code}» басылымы тек бір мектепте қолданылады: құрал әсерін мектеп әсерінен ажырату мүмкін емес.",
     ),
-    "arm_without_outcome": ("Для издания {arm_code} нет результатов итоговой проверки.",
-                            "{arm_code} басылымы үшін қорытынды тексеру нәтижелері жоқ."),
+    "arm_without_outcome": ("Для издания «{arm_code}» нет результатов итоговой проверки.",
+                            "«{arm_code}» басылымы үшін қорытынды тексеру нәтижелері жоқ."),
     "assignment_at_school_level": (
         "Издание выбрано на уровне школы; неопределённость оценивается по школам, а не по классам.",
         "Басылым мектеп деңгейінде таңдалған; белгісіздік сыныптар бойынша емес, мектептер бойынша бағаланады.",
     ),
     "few_clusters": (
-        "Мало независимых групп ({unit}): А — {a}, Б — {b}, требуется не менее {min} на издание. Интервал не рассчитывается; число ответов не заменяет число групп.",
-        "Тәуелсіз топтар аз ({unit}): А — {a}, Б — {b}, әр басылымға кемінде {min} қажет. Интервал есептелмейді.",
+        "Мало независимых групп ({unit_label}): А — {a}, Б — {b}, требуется не менее {min} на издание. Интервал не рассчитывается; число ответов не заменяет число групп.",
+        "Тәуелсіз топтар аз ({unit_label}): А — {a}, Б — {b}, әр басылымға кемінде {min} қажет. Интервал есептелмейді.",
     ),
     "no_baseline_measure": ("Нет входной проверки: поправка на исходный уровень невозможна, доступно только описание.",
                             "Кіріс тексеру жоқ: бастапқы деңгейге түзету мүмкін емес, тек сипаттама қолжетімді."),
@@ -71,6 +71,9 @@ def _fmt(template: str, params: dict, lang: str) -> str:
                     + (f", n={x['n']}" if "n" in x else "") + ")" for x in v)
             else:
                 p[f"{k}_list"] = ", ".join(str(x) for x in v)
+    if "unit" in p:
+        p["unit_label"] = {"class": ("классы", "сыныптар"), "school": ("школы", "мектептер")}.get(
+            p["unit"], (p["unit"], p["unit"]))[0 if lang == "ru" else 1]
     if "coverage" in p and p["coverage"] is not None:
         p["coverage_pct"] = f"{round(100 * p['coverage'])}%"
     try:
@@ -79,17 +82,27 @@ def _fmt(template: str, params: dict, lang: str) -> str:
         return template
 
 
-def render_reasons(reasons: list[dict], edition_codes: dict[str, str] | None = None) -> list[dict]:
+def render_reasons(reasons: list[dict], edition_codes: dict[str, str | tuple[str, str]] | None = None) -> list[dict]:
+    """Render reason texts. ``edition_codes`` maps an arm/edition id to its user-facing name — either one string or
+    a ``(ru, kz)`` pair — so messages say "Пособие А", not the internal edition code."""
     out = []
+
+    def name(arm, lang: str):
+        v = (edition_codes or {}).get(arm, arm)
+        return v[0 if lang == "ru" else 1] if isinstance(v, tuple) else v
+
     for r in reasons:
-        params = dict(r.get("params", {}))
-        if edition_codes and "arm" in params:
-            params["arm_code"] = edition_codes.get(params["arm"], params["arm"])
-        params.setdefault("arm_code", params.get("arm", ""))
-        if edition_codes and "strata" in params:
-            params["strata"] = [dict(s, arm_code=edition_codes.get(s.get("arm"), s.get("arm"))) for s in params["strata"]]
+        rendered = {}
+        for lang in ("ru", "kz"):
+            params = dict(r.get("params", {}))
+            if edition_codes and "arm" in params:
+                params["arm_code"] = name(params["arm"], lang)
+            params.setdefault("arm_code", params.get("arm", ""))
+            if edition_codes and "strata" in params:
+                params["strata"] = [dict(s, arm_code=name(s.get("arm"), lang)) for s in params["strata"]]
+            rendered[lang] = params
         ru, kz = REASONS.get(r["code"], (r["code"], r["code"]))
-        out.append({**r, "message_ru": _fmt(ru, params, "ru"), "message_kz": _fmt(kz, params, "kz")})
+        out.append({**r, "message_ru": _fmt(ru, rendered["ru"], "ru"), "message_kz": _fmt(kz, rendered["kz"], "kz")})
     return out
 
 
@@ -127,5 +140,8 @@ CONSTRAINT_LABELS = {
 
 
 def label_constraint(c: dict) -> dict:
+    """Constraint text for conflicts. The topic is named by its title (``topic_title_ru``/``_kz``) when known."""
     ru, kz = CONSTRAINT_LABELS.get(c["constraint"], (c["constraint"], c["constraint"]))
-    return {**c, "message_ru": ru.format(**c), "message_kz": kz.format(**c)}
+    p_ru = {**c, "topic_code": f"«{c['topic_title_ru']}»" if c.get("topic_title_ru") else c.get("topic_code")}
+    p_kz = {**c, "topic_code": f"«{c.get('topic_title_kz') or c.get('topic_title_ru')}»" if c.get("topic_title_ru") else c.get("topic_code")}
+    return {**c, "message_ru": ru.format(**p_ru), "message_kz": kz.format(**p_kz)}

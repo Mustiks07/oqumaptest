@@ -286,6 +286,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/comparisons/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Comparison Summary
+         * @description Every topic of the programme compared for two editions, with a verdict computed from the rows.
+         */
+        post: operations["comparison_summary_api_v1_comparisons_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/config": {
         parameters: {
             query?: never;
@@ -1805,7 +1825,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "overview" | "topic_evidence" | "comparison" | "plan" | "follow_up";
+            kind: "overview" | "topic_evidence" | "comparison" | "edition_summary" | "plan" | "follow_up";
             /** Method Version */
             method_version: string;
         } & {
@@ -2799,10 +2819,164 @@ export interface components {
              */
             note: string;
         };
+        /** EditionSummaryEdition */
+        EditionSummaryEdition: {
+            /** Code */
+            code: string;
+            /** Id */
+            id: string;
+            /** Name Kz */
+            name_kz: string;
+            /** Name Ru */
+            name_ru: string;
+            /** Title */
+            title: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** EditionSummaryRequest */
+        EditionSummaryRequest: {
+            /** Dataset Id */
+            dataset_id: string;
+            /** Edition A Id */
+            edition_a_id?: string | null;
+            /** Edition B Id */
+            edition_b_id?: string | null;
+            filters?: components["schemas"]["Filters"];
+            /**
+             * Strata Scheme
+             * @default pre_three_level
+             */
+            strata_scheme: string;
+            /**
+             * Weight Mode
+             * @default pooled
+             */
+            weight_mode: string;
+        };
+        /** EditionSummaryResult */
+        EditionSummaryResult: {
+            /** Comparison Method Version */
+            comparison_method_version: string;
+            /** Editions */
+            editions: {
+                [key: string]: components["schemas"]["EditionSummaryEdition"];
+            };
+            /** Exploratory */
+            exploratory: boolean;
+            /** Method Version */
+            method_version: string;
+            /** Rows */
+            rows: components["schemas"]["EditionSummaryRow"][];
+            /** Strata Scheme */
+            strata_scheme: string;
+            verdict: components["schemas"]["EditionVerdict"];
+            /** Weight Mode */
+            weight_mode: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** EditionSummaryRow */
+        EditionSummaryRow: {
+            /** Adjusted A */
+            adjusted_a: number | null;
+            /** Adjusted B */
+            adjusted_b: number | null;
+            /** Adjusted Difference */
+            adjusted_difference: number | null;
+            /** Ci */
+            ci: {
+                [key: string]: number;
+            } | null;
+            /** Ci Unavailable Reason */
+            ci_unavailable_reason: string | null;
+            /** Code */
+            code: string;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Favoured */
+            favoured: ("a" | "b") | null;
+            /** N */
+            n: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Raw A */
+            raw_a: number | null;
+            /** Raw B */
+            raw_b: number | null;
+            /** Raw Difference */
+            raw_difference: number | null;
+            /** Reasons */
+            reasons: components["schemas"]["Reason"][];
+            /** Signal */
+            signal: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "comparable" | "limited" | "not_comparable";
+            /** Status Label Kz */
+            status_label_kz: string;
+            /** Status Label Ru */
+            status_label_ru: string;
+            /** Title Kz */
+            title_kz: string;
+            /** Title Ru */
+            title_ru: string;
+            /** Topic Id */
+            topic_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** EditionVerdict */
+        EditionVerdict: {
+            /** A Topics */
+            a_topics: string[];
+            /** B Topics */
+            b_topics: string[];
+            /** Detail Kz */
+            detail_kz: string;
+            /** Detail Ru */
+            detail_ru: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic_dependent" | "a_ahead" | "b_ahead" | "no_confirmed_difference" | "insufficient";
+            /** Not Compared Topics */
+            not_compared_topics: string[];
+            /** Raw A Ahead Topics */
+            raw_a_ahead_topics: string[];
+            /** Raw B Ahead Topics */
+            raw_b_ahead_topics: string[];
+            /** Raw Misleading */
+            raw_misleading: boolean;
+            /** Raw Story Kz */
+            raw_story_kz: string | null;
+            /** Raw Story Ru */
+            raw_story_ru: string | null;
+            /** Text Kz */
+            text_kz: string;
+            /** Text Ru */
+            text_ru: string;
+            /** Unclear Topics */
+            unclear_topics: string[];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[ComparisonResult] */
         Envelope_ComparisonResult_: {
             context: components["schemas"]["AnalysisContext"];
             result: components["schemas"]["ComparisonResult"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[EditionSummaryResult] */
+        Envelope_EditionSummaryResult_: {
+            context: components["schemas"]["AnalysisContext"];
+            result: components["schemas"]["EditionSummaryResult"];
         } & {
             [key: string]: unknown;
         };
@@ -6657,6 +6831,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ComparisonResult_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    comparison_summary_api_v1_comparisons_summary_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditionSummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_EditionSummaryResult_"];
                 };
             };
             /** @description Bad Request */

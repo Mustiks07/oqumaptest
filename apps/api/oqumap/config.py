@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-CODE_VERSION = "0.1.0"
+CODE_VERSION = "0.2.0"  # bump when stored analysis payloads change shape or wording
 
 
 class Settings(BaseSettings):

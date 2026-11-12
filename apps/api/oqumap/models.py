@@ -488,6 +488,9 @@ class TeachingPlan(IdMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200))
     scope: Mapped[str] = mapped_column(String(200))  # e.g. "6 класс, все классы набора"
     horizon: Mapped[str] = mapped_column(String(100))
+    name_kz: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    scope_kz: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    horizon_kz: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="current")  # current|proposed|approved|superseded
     source_analysis_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 

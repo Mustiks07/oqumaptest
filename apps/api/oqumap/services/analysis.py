@@ -23,6 +23,7 @@ from ..config import CODE_VERSION
 from ..demo.content import MISCONCEPTIONS
 from ..errors import ApiError, not_found
 from .common import fingerprint, get_dataset
+from .labels import edition_name
 from .messages import render_reasons
 
 METHOD_VERSION = f"{scoring.METHOD_VERSION_SCORING}+misconception-v2+std-v1"
@@ -713,10 +714,14 @@ def _compare_topic(session: Session, meta: DatasetFrame, topic: m.Topic, req: Co
     res = compare_arms(learners, a_id, b_id, req.strata_scheme, req.weight_mode, context, replicates=replicates,
                        adjustment_possible=has_base)
     res["topic"] = {"topic_id": topic.id, "code": topic.code, "title_ru": topic.title_ru, "title_kz": topic.title_kz}
-    res["editions"] = {"a": {"id": a_id, "code": ed_a.code, "title": ed_a.title},
-                       "b": {"id": b_id, "code": ed_b.code, "title": ed_b.title}}
+    res["editions"] = {"a": {"id": a_id, "code": ed_a.code, "title": ed_a.title,
+                             "name_ru": edition_name(ed_a.title, ed_a.code, "ru"), "name_kz": edition_name(ed_a.title, ed_a.code, "kz")},
+                       "b": {"id": b_id, "code": ed_b.code, "title": ed_b.title,
+                             "name_ru": edition_name(ed_b.title, ed_b.code, "ru"), "name_kz": edition_name(ed_b.title, ed_b.code, "kz")}}
     res["forms"] = {"a": [meta.forms[x].code for x in forms_by_arm[a_id]], "b": [meta.forms[x].code for x in forms_by_arm[b_id]]}
-    res["reasons"] = render_reasons(res["reasons"], {a_id: ed_a.code, b_id: ed_b.code})
+    res["reasons"] = render_reasons(res["reasons"], {
+        a_id: (edition_name(ed_a.title, ed_a.code, "ru"), edition_name(ed_a.title, ed_a.code, "kz")),
+        b_id: (edition_name(ed_b.title, ed_b.code, "ru"), edition_name(ed_b.title, ed_b.code, "kz"))})
     return res
 
 
