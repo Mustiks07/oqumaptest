@@ -159,14 +159,19 @@ def _comparison_metrics(res: dict) -> dict:
 
 
 def _comparison_template(res: dict, lang: str) -> dict:
-    a, b = res["editions"]["a"]["code"], res["editions"]["b"]["code"]
+    from ..services.labels import edition_name
+
+    ea, eb = res["editions"]["a"], res["editions"]["b"]
+    a = ea.get(f"name_{lang}") or edition_name(ea.get("title"), ea["code"], lang)
+    b = eb.get(f"name_{lang}") or edition_name(eb.get("title"), eb["code"], lang)
+    topic = res["topic"].get(f"title_{lang}") or res["topic"]["code"]
     raw, adj = res["raw"], res["adjusted"]
     ci = res["uncertainty"]["adjusted_difference_ci"]
     status_ru, status_kz = COMPARABILITY[res["status"]]
     inf_ru, inf_kz = INFERENCE[res["inference_level"]]
     reasons = [r["message_ru" if lang == "ru" else "message_kz"] for r in res["reasons"] if r["severity"] != "info"]
     if lang == "ru":
-        parts = [f"Тема {res['topic']['code']}. Статус сопоставимости: {status_ru}. Уровень вывода: {inf_ru}."]
+        parts = [f"Тема «{topic}». Сопоставимость групп: {status_ru.lower()}. Уровень вывода: {inf_ru.lower()}."]
         parts.append(f"Исходные средние доли баллов: {a} — {_pct(raw['a']['mean'])} ({raw['a']['n_learners']} уч., "
                      f"{raw['a']['n_classes']} кл.), {b} — {_pct(raw['b']['mean'])} ({raw['b']['n_learners']} уч., "
                      f"{raw['b']['n_classes']} кл.).")
@@ -174,7 +179,7 @@ def _comparison_template(res: dict, lang: str) -> dict:
             parts.append(f"После стандартизации по входному уровню с общими весами: {a} — {_pct(adj['a'])}, "
                          f"{b} — {_pct(adj['b'])}; разница {b} − {a} = {_pp(adj['difference'])}.")
             if ci:
-                parts.append(f"95% интервал (кластерный бутстрэп по {res['uncertainty']['cluster_unit'] == 'class' and 'классам' or 'школам'}): "
+                parts.append(f"95% интервал с учётом различий между {res['uncertainty']['cluster_unit'] == 'class' and 'классами' or 'школами'}: "
                              f"от {_pp(ci['low'])} до {_pp(ci['high'])}.")
             if raw["difference"] is not None and adj["difference"] is not None and (raw["difference"] > 0) != (adj["difference"] > 0):
                 parts.append("Направление разницы изменилось после учёта состава групп: общий рейтинг вводил бы в заблуждение.")
@@ -184,7 +189,7 @@ def _comparison_template(res: dict, lang: str) -> dict:
             parts.append("Интервал включает ноль: это не доказывает равенство изданий, а означает, что данных недостаточно для различения.")
         limits = reasons + ["Наблюдательные данные: разница не является доказательством причинного влияния пособия."]
     else:
-        parts = [f"{res['topic']['code']} тақырыбы. Салыстыру мәртебесі: {status_kz}. Қорытынды деңгейі: {inf_kz}."]
+        parts = [f"«{topic}» тақырыбы. Топтарды салыстыру: {status_kz.lower()}. Қорытынды деңгейі: {inf_kz.lower()}."]
         parts.append(f"Бастапқы орташа үлес: {a} — {_pct(raw['a']['mean'])}, {b} — {_pct(raw['b']['mean'])}.")
         if adj["a"] is not None:
             parts.append(f"Кіріс деңгейі бойынша стандарттаудан кейін: {a} — {_pct(adj['a'])}, {b} — {_pct(adj['b'])}; "
