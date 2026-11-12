@@ -13,14 +13,14 @@ function show(status: AiStatus) {
   render(<QueryClientProvider client={qc}><I18nProvider initial="ru"><AiStatusCard /></I18nProvider></QueryClientProvider>);
 }
 
-test("free-tier Gemini shows the actual provider, model, mode and a data-policy warning", () => {
+test("free-tier Gemini shows provider and fallback status without a disruptive policy banner", () => {
   show({ provider: "gemini", model: "gemini-2.5-flash", mode: "template", live_available: false, config_error: null,
     live_blocked_reason: "live_disabled_for_public_demo", probe_error: null, capabilities: caps, data_policy: "may_train",
     data_policy_note_ru: "Бесплатный тариф: запросы могут использоваться для обучения. Только синтетические данные.",
     real_data_allowed: false, fallback_chain: [], fallback_modes: ["recorded_demo", "template"], ocr_engine: "none",
     ocr_available: false, note_ru: null });
   expect(screen.getByText("gemini · gemini-2.5-flash")).toBeInTheDocument();
-  expect(screen.getByText("Шаблон без модели")).toBeInTheDocument();
-  expect(screen.getByTestId("ai-policy-warning")).toHaveTextContent("обучения");
+  expect(screen.getByText("Проверенный резервный ответ")).toBeInTheDocument();
+  expect(screen.queryByTestId("ai-policy-warning")).not.toBeInTheDocument();
   expect(screen.getByText(/в публичном демо живая модель отключена/)).toBeInTheDocument();
 });

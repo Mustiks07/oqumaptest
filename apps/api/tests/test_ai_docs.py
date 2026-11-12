@@ -8,6 +8,7 @@ import pytest
 from conftest import login
 
 from oqumap.ai import provider as prov
+from oqumap.ai import verify
 from oqumap.ai.provider import CallMeta, Provider
 
 
@@ -25,6 +26,11 @@ class FakeProvider(Provider):
     def complete_json(self, system, user, schema, name="result", **kw):
         assert "данные" in system  # documents are declared as data
         return (self.payload(json.loads(user)) if callable(self.payload) else self.payload), CallMeta("fake", "fake-model", 5)
+
+
+def test_numbered_list_markers_are_not_treated_as_model_claims():
+    check = verify.check_numbers("1. Первый вывод\n2) Второй вывод: 47,1%", {"score": 0.471})
+    assert check == {"status": "passed", "numbers_checked": 1, "unverified_numbers": []}
 
 
 @pytest.fixture

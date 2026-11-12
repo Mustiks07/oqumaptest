@@ -51,9 +51,9 @@ export function Assistant({ onClose }: { onClose: () => void }) {
         <Button size="sm" onClick={onClose}>{t("common.close")}</Button>
       </div>
       <p className="xs muted" style={{ padding: "8px 12px", margin: 0 }}>
-        {t("assistant.context", { dataset: dataset ? (lang === "kz" ? dataset.name_kz : dataset.name_ru) : "—", topic: topic ? `${topic.code} ${pick(topic, "title")}` : "—" })}
+        {t("assistant.context", { dataset: dataset ? (lang === "kz" ? dataset.name_kz : dataset.name_ru) : "—", topic: topic ? pick(topic, "title") : "—" })}
       </p>
-      <div style={{ padding: "0 12px 8px" }}><AiStatusCard /></div>
+      <div style={{ padding: "0 12px 8px" }}><AiStatusCard compact /></div>
       <div className="stack" style={{ flex: 1, overflowY: "auto", padding: 12 }} aria-live="polite">
         {msgs.length === 0 && (
           <div className="stack">

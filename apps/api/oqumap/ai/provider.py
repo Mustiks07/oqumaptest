@@ -176,13 +176,16 @@ class ChainProvider(Provider):
         from .gate import circuit_open, record_failure, record_fallback
 
         for i, adapter in enumerate(self.chain):
-            if circuit_open(adapter.name):
+            # Capacity and rate limits are model-specific at several providers. A busy primary model must not
+            # open the circuit for a healthy fallback that uses the same provider and API key.
+            circuit_key = f"{adapter.name}:{adapter.model}"
+            if circuit_open(circuit_key):
                 if i + 1 < len(self.chain):
                     continue
                 raise LLMError("circuit_open", adapter.name)
             if i > 0:
                 record_fallback(self.chain[0].name, adapter.name)
-            yield adapter, (lambda a=adapter: record_failure(a.name))
+            yield adapter, (lambda key=circuit_key: record_failure(key))
 
     def complete_json(self, system: str, user: str, schema: dict, name: str = "result") -> tuple[dict, CallMeta]:
         self._check_size(system, user)

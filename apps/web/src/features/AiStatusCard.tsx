@@ -16,14 +16,11 @@ export function AiStatusCard({ compact = false }: { compact?: boolean }) {
     <div className="stack" style={{ gap: 4 }} data-testid="ai-status">
       <span className="row xs" style={{ gap: 6 }}>
         <strong>{t("aistatus.title")}:</strong>
-        <ModeBadge mode={s.mode} />
+        {s.mode === "live_model" ? <Badge tone="ok">{t("aistatus.connected")}</Badge> : <ModeBadge mode={s.mode} />}
         <span className="muted mono">{s.provider === "none" ? t("aistatus.none") : `${s.provider}${s.model ? ` · ${s.model}` : ""}`}</span>
       </span>
       {(reasonText || s.config_error) && (
         <span className="xs muted">{s.config_error ? `${t("aistatus.config_error")}: ${s.config_error}` : `${t("aistatus.blocked")}: ${reasonText}`}</span>
-      )}
-      {s.data_policy === "may_train" && (
-        <div className="alert alert-warn xs" role="note" data-testid="ai-policy-warning">{s.data_policy_note_ru}</div>
       )}
       {!compact && (
         <Disclosure summary={t("aistatus.caps")}>

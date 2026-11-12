@@ -336,10 +336,11 @@ def test_sandbox_understands_topic_names_in_russian_and_kazakh(client, H, datase
 
 
 def test_sandbox_model_extraction_fills_the_strict_schema_only(client, H, datasets, monkeypatch):
-    from oqumap.ai import tasks
+    from oqumap.ai import gate, tasks
 
     def fake_live(task, system, user, schema, synthetic=True):
         assert task == "sandbox_intent" and user["topics"][0]["title_ru"]
+        assert gate.live_gate_var.get() is not None
         return {"ops": [{"op": "add", "topic": "T3", "value": 1}, {"op": "add", "topic": "T99", "value": 5},
                         {"op": "explode", "topic": "T1"}]}, {"mode": "live_model", "provider": "fake", "model": "fake-1"}
 

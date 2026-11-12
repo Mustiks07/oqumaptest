@@ -44,6 +44,8 @@ def collect_numbers(obj, out: set[float] | None = None) -> set[float]:
 def check_numbers(text: str, metrics: dict, context_text: str = "", tolerance: float = 0.6) -> dict:
     allowed = collect_numbers(metrics)
     stripped = CODE_RE.sub(" ", text)
+    # Ordered-list markers ("1. ...", "2) ...") structure the prose; they are not numeric claims.
+    stripped = re.sub(r"(?m)^\s*\d{1,2}[.)]\s+", " ", stripped)
     ctx_fracs = {re.sub(r"\s+", "", f) for f in FRACTION_RE.findall(context_text)}
     for frac in FRACTION_RE.findall(stripped):
         if re.sub(r"\s+", "", frac) in ctx_fracs:

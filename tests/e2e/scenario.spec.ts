@@ -88,7 +88,7 @@ test("full methodist path", async ({ page }) => {
   await expect(page.getByTestId("guide-followup")).toHaveAttribute("data-done", "1"); // progress survives reload
   await page.getByRole("button", { name: "Ассистент" }).click();
   await page.getByTestId("assistant").getByRole("button", { name: "Какие данные подтверждают проблему?" }).click();
-  await expect(page.getByTestId("assistant").getByText("Шаблон без модели")).toBeVisible();
+  await expect(page.getByTestId("assistant").getByText(/Живой ответ модели|Проверенный резервный ответ/)).toBeVisible();
 
   expect(errors).toEqual([]);
 });

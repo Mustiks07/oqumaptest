@@ -683,7 +683,9 @@ def sandbox_intent(body: IntentRequestModel, p: P, session: DB) -> dict[str, Any
     from ..services import sandbox
 
     ratelimit.check(session, "compute", p.user_id, "rate_compute")
-    return sandbox.preview(session, p.org_id, body, p.user_id)
+    # Rule parsing stays local; only an unrecognised remainder reaches the provider-neutral model adapter.
+    with use_gate(LiveGate.for_principal(session, p)):
+        return sandbox.preview(session, p.org_id, body, p.user_id)
 
 
 @router.post("/sandbox/run", tags=["planning"])
