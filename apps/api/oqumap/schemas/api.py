@@ -107,6 +107,8 @@ class TopicOverviewRow(Model):
     objectives_measured: int
     coverage: float | None
     deficit: float | None
+    suppressed: bool = False
+    suppression_reason: str | None = None
 
 
 class HeatCohort(Model):
@@ -144,7 +146,7 @@ class OptionStat(Model):
     text: str
     correct: bool
     misconception: str | None
-    count: int
+    count: int | None
     share: float | None
 
 
@@ -155,8 +157,8 @@ class ItemEvidence(Model):
     stem_kz: str
     objectives: list[dict[str, Any]]
     topic_weight: float
-    n_answered: int
-    n_omitted: int
+    n_answered: int | None
+    n_omitted: int | None
     p_correct: float | None
     omit_rate: float | None
     options: list[OptionStat]
@@ -179,10 +181,17 @@ class Misconception(Model):
     label_ru: str
     label_kz: str
     diagnostic_check_ru: str
-    n_learners: int
+    n_learners: int | None
     share_of_learners: float | None
+    eligible_learners: int | None = None
+    selection_numerator: int | None = None
+    opportunity_denominator: int | None = None
+    opportunity_share: float | None = None
     items: list[str]
     interpretation: str
+    method: str = "repeated_selection_v2"
+    method_note_ru: str | None = None
+    method_note_kz: str | None = None
 
 
 class SourceRef(Model):
@@ -212,9 +221,11 @@ class TopicEvidenceResult(Model):
     classes: list[dict[str, Any]]
     prerequisites: list[dict[str, Any]]
     sources: list[SourceRef]
-    exclusions: dict[str, int]
+    exclusions: dict[str, int | None]
     rules: dict[str, str]
     outcome_assessments: list[str]
+    suppressed: bool = False
+    suppression_reason: str | None = None
 
 
 class Reason(Model):
@@ -269,6 +280,12 @@ class PlanChange(Model):
     after: int
     delta: int
     priority: float
+    reason_kind: Literal["investment", "donor", "protected", "unchanged"]
+    reason_ru: str
+    reason_kz: str
+    donor_reason_ru: str | None = None
+    donor_reason_kz: str | None = None
+    evidence: dict[str, Any]
 
 
 class PlanScenario(Model):
@@ -276,6 +293,9 @@ class PlanScenario(Model):
     status: Literal["optimal", "feasible", "infeasible", "unknown", "invalid"]
     status_message_ru: str | None = None
     status_message_kz: str | None = None
+    verdict_ru: str | None = None
+    verdict_kz: str | None = None
+    human_status: Literal["ready", "needs_attention"] | None = None
     hours: dict[str, int] | None
     validation: dict[str, Any] | None
     conflict: dict[str, Any] | None
@@ -285,6 +305,7 @@ class PlanScenario(Model):
     objective_value: float | None = None
     objective: dict[str, Any] | None = None
     solver: dict[str, Any] | None = None
+    technical_details: dict[str, Any] | None = None
     input_errors: list[dict[str, Any]] | None = None
 
 

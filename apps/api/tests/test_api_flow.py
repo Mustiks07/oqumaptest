@@ -29,6 +29,26 @@ def test_health_and_datasets_are_synthetic(fresh_client):
     assert all(d["is_synthetic"] for d in ds)
 
 
+def test_small_group_status_suppresses_topic_numbers(client, H, datasets):
+    ds = datasets["base"]
+    cur = client.get("/api/v1/curriculum", params={"dataset_id": ds["id"]}, headers=H).json()
+    cohort_id = cur["cohorts"][0]["id"]
+    filters = {"cohort_ids": [cohort_id]}
+    ov = client.post(f"/api/v1/datasets/{ds['id']}/overview", json=filters, headers=H).json()["result"]
+    small = [t for t in ov["topics"] if t["status"] == "insufficient_data"]
+    assert small and all(t["score"] is None and t["deficit"] is None and t["suppressed"] for t in small)
+    assert all(c["topic_id"] not in {t["topic_id"] for t in small} for c in ov["heatmap"]["cells"])
+
+    t3 = topic_id(cur, "T3")
+    ev = client.get(f"/api/v1/topics/{t3}/evidence",
+                    params={"dataset_id": ds["id"], "filters": json.dumps(filters)}, headers=H).json()["result"]
+    assert ev["status"] == "insufficient_data" and ev["summary"] is None and ev["suppressed"]
+    assert not ev["classes"] and not ev["misconceptions"]
+    assert all(i["n_answered"] is None and i["p_correct"] is None and
+               all(o["count"] is None and o["share"] is None for o in i["options"]) for i in ev["items"])
+    assert all(v is None for v in ev["exclusions"].values())
+
+
 def test_full_methodist_path(fresh_client):
     c = fresh_client
     H = login(c)
@@ -51,6 +71,8 @@ def test_full_methodist_path(fresh_client):
     ev = c.get(f"/api/v1/topics/{t3}/evidence", params={"dataset_id": ds["id"], "filters": json.dumps(filters)}, headers=H).json()
     assert ev["context"]["is_stale"] is False
     assert ev["result"]["misconceptions"] and ev["result"]["sources"]
+    assert all(m["method"] == "repeated_selection_v2" and m["selection_numerator"] <= m["opportunity_denominator"]
+               for m in ev["result"]["misconceptions"])
     # same filters → same snapshot id (screen / assistant / report quote one analysis)
     ev2 = c.get(f"/api/v1/topics/{t3}/evidence", params={"dataset_id": ds["id"], "filters": json.dumps(filters)}, headers=H).json()
     assert ev2["context"]["analysis_id"] == ev["context"]["analysis_id"]
@@ -67,6 +89,9 @@ def test_full_methodist_path(fresh_client):
     assert expl["verification"]["numbers"]["status"] == "passed"
 
     ctx = c.get("/api/v1/plans/context", params={"dataset_id": ds["id"], "filters": json.dumps(filters)}, headers=H).json()
+    assert all(t["min_hours"] >= t["current_hours"] and t["protected_from_reduction"] for t in ctx["topics"]
+               if t["topic_status"] in ("not_measured", "unverified_mapping", "insufficient_data"))
+    assert next(t for t in ctx["topics"] if t["code"] == "T2")["planning_facts"]["prerequisite_support_for"]
     topics = [{"topic_id": t["topic_id"], "code": t["code"], "title": t["title_ru"], "current_hours": t["current_hours"],
                "priority": t["priority"], "min_hours": t["min_hours"], "max_hours": t["max_hours"],
                "elapsed_hours": t["elapsed_hours"]} for t in ctx["topics"]]
@@ -76,8 +101,12 @@ def test_full_methodist_path(fresh_client):
     scen = plan["result"]["scenarios"][0]
     assert scen["status"] in ("optimal", "feasible") and scen["validation"]["valid"]
     assert sum(scen["hours"].values()) == ctx["budget"]
+    assert scen["human_status"] == "ready" and scen["verdict_ru"] == "Оптимальный план, ограничения проверены"
+    assert scen["technical_details"]["solver_status"] in ("optimal", "feasible")
     t3_change = next(ch for ch in scen["changes"] if ch["code"] == "T3")
-    assert t3_change["delta"] > 0
+    assert t3_change["delta"] > 0 and t3_change["reason_kind"] == "investment" and "%" in t3_change["reason_ru"]
+    assert any(ch["donor_reason_ru"] for ch in scen["changes"] if ch["delta"] < 0)
+    assert any(ch["delta"] for ch in plan["result"]["scenarios"][1]["changes"])
 
     rec = c.post("/api/v1/ai/recommend", json={"topic_analysis_id": ev["context"]["analysis_id"],
                                                 "comparison_analysis_id": comp["context"]["analysis_id"]}, headers=H).json()

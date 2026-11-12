@@ -124,10 +124,6 @@ def test_actual_onboarding_analysis_planner_and_diagnostic(imported):
     assert all(d["status"] == "ready" and d["pages"] == 50 for d in imported["documents"])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Base backend flags insufficient_data but still exposes small-filter numerical summaries; fixture report alone suppresses them.",
-)
 def test_production_api_suppresses_small_group_numbers(imported):
     assert imported["production_small_filter_numbers_suppressed"]
 

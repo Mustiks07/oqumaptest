@@ -50,6 +50,24 @@ def plan_context(session: Session, org_id: str, dataset_id: str, filters: an.Fil
     by_topic = {t["topic_id"]: t for t in ov["result"]["topics"]}
     deficits = [t["deficit"] for t in by_topic.values() if t["deficit"] is not None]
     dmax = max(deficits) if deficits else 1.0
+    evidence_by_topic: dict[str, dict] = {}
+    for topic_id, row in by_topic.items():
+        if row.get("status") not in ("difficult", "attention", "stable"):
+            continue
+        evidence = an.topic_evidence(session, org_id, dataset_id, topic_id, filters, user_id)["result"]
+        measured_objectives = [o for o in evidence["objectives"] if (o.get("score") or {}).get("mean") is not None]
+        weakest = min(measured_objectives, key=lambda o: o["score"]["mean"]) if measured_objectives else None
+        evidence_by_topic[topic_id] = {
+            "score": (row.get("score") or {}).get("mean"),
+            "weakest_objective": None if weakest is None else {
+                "code": weakest["code"], "text_ru": weakest["text_ru"], "text_kz": weakest["text_kz"],
+                "score": weakest["score"]["mean"],
+            },
+            "prerequisites": [{
+                "code": p["code"], "topic_code": p["topic_code"], "text_ru": p["text_ru"], "text_kz": p["text_kz"],
+                "score": (p.get("score") or {}).get("mean"), "confirmed": p["confirmed"],
+            } for p in evidence["prerequisites"]],
+        }
     topics = []
     if plan is not None:
         rows = list(session.scalars(select(m.PlanTopicHours).where(m.PlanTopicHours.plan_id == plan.id)))
@@ -61,20 +79,49 @@ def plan_context(session: Session, org_id: str, dataset_id: str, filters: an.Fil
                 prio, basis = round(ot["deficit"] / dmax, 3), "deficit"
             else:
                 prio, basis = 0.5, "not_measured_default"
+            protected = ot.get("status") in ("not_measured", "unverified_mapping", "insufficient_data")
+            protection_ru = "Часы защищены от сокращения: сначала нужна диагностика."
+            protection_kz = "Сағат қысқартудан қорғалған: алдымен диагностика қажет."
+            facts = {**evidence_by_topic.get(t.id, {}), "status": ot.get("status"),
+                     "title_ru": t.title_ru, "title_kz": t.title_kz,
+                     "protected_from_reduction": protected,
+                     "protection_reason_ru": protection_ru if protected else None,
+                     "protection_reason_kz": protection_kz if protected else None}
             topics.append({
                 "topic_id": t.id, "code": t.code, "title_ru": t.title_ru, "title_kz": t.title_kz,
-                "current_hours": r.planned_hours, "elapsed_hours": r.elapsed_hours, "min_hours": r.min_hours,
+                "current_hours": r.planned_hours, "elapsed_hours": r.elapsed_hours,
+                "min_hours": max(r.min_hours or 0, r.planned_hours) if protected else r.min_hours,
                 "max_hours": r.max_hours, "actual_hours": r.actual_hours, "priority": prio, "priority_basis": basis,
                 "topic_status": ot.get("status"), "score": (ot.get("score") or {}).get("mean"),
-                "recommend_diagnostic": basis != "deficit",
+                "recommend_diagnostic": protected, "protected_from_reduction": protected,
+                "protection_reason_ru": protection_ru if protected else None,
+                "protection_reason_kz": protection_kz if protected else None,
+                "planning_facts": facts,
             })
+        by_code = {t["code"]: t for t in topics}
+        # A weak prerequisite inherits part of the priority of the difficult topic it enables.
+        for target in topics:
+            if target.get("score") is None or target["score"] >= 0.70:
+                continue
+            for prereq in target["planning_facts"].get("prerequisites", []):
+                source = by_code.get(prereq["topic_code"])
+                if source is None or prereq.get("score") is None or prereq["score"] >= 0.70:
+                    continue
+                support_priority = round(min(1.0, max(0.65, target["priority"] * 0.9)), 3)
+                source["planning_facts"].setdefault("prerequisite_support_for", []).append({
+                    "code": target["code"], "title_ru": target["title_ru"], "title_kz": target["title_kz"],
+                    "score": target["score"],
+                })
+                if support_priority > source["priority"]:
+                    source["priority"] = support_priority
+                    source["priority_basis"] = "prerequisite_support"
     return {
         "plan": None if plan is None else {"id": plan.id, "name": plan.name, "scope": plan.scope, "horizon": plan.horizon,
                                            "version": plan.version, "status": plan.status, "plan_group_id": plan.plan_group_id},
         "topics": topics,
         "budget": sum(t["current_hours"] for t in topics),
-        "priority_rule": "priority = deficit / max(deficit) по темам с подтверждённой разметкой; неизмеренные темы — 0,5 "
-                         "и рекомендация провести диагностику (не обнуляется).",
+        "priority_rule": "Приоритет основан на дефиците; слабый пререквизит получает поддержку от трудной темы. "
+                         "Неизмеренные темы защищены от сокращения до диагностики.",
         "weights_version": "priority-weights-v1",
         "source_analysis_id": ov["context"]["analysis_id"],
         "is_calendar": False,
@@ -103,11 +150,22 @@ def solve(session: Session, org_id: str, req: PlanSolveRequest, user_id: str | N
         plan = session.scalar(select(m.TeachingPlan).where(m.TeachingPlan.id == req.plan_id, m.TeachingPlan.org_id == org_id))
         if plan is None:
             raise not_found("plan", req.plan_id)
+    trusted_context = plan_context(session, org_id, req.dataset_id, req.filters, user_id)
+    trusted_topics = {t["topic_id"]: t for t in trusted_context["topics"]}
+    constraints = []
+    for t in req.topics:
+        trusted = trusted_topics.get(t.topic_id or "", {})
+        min_hours = t.min_hours
+        if trusted.get("protected_from_reduction"):
+            min_hours = max(t.current_hours, min_hours or 0)
+        constraints.append(pl.TopicConstraint(
+            topic_id=t.topic_id or f"block:{t.code}", code=t.code, title=t.title,
+            current_hours=t.current_hours, priority=t.priority, min_hours=min_hours,
+            max_hours=t.max_hours, fixed=t.fixed, elapsed_hours=t.elapsed_hours,
+            max_change=t.max_change, evidence=trusted.get("planning_facts", {}),
+        ))
     problem = pl.PlanProblem(
-        topics=[pl.TopicConstraint(topic_id=t.topic_id or f"block:{t.code}", code=t.code, title=t.title,
-                                   current_hours=t.current_hours, priority=t.priority, min_hours=t.min_hours,
-                                   max_hours=t.max_hours, fixed=t.fixed, elapsed_hours=t.elapsed_hours,
-                                   max_change=t.max_change) for t in req.topics],
+        topics=constraints,
         budget=req.budget, change_penalty=req.change_penalty, diminishing_rate=req.diminishing_rate,
         time_limit_seconds=req.time_limit_seconds,
     )
@@ -115,9 +173,32 @@ def solve(session: Session, org_id: str, req: PlanSolveRequest, user_id: str | N
     def compute():
         scenarios = []
         for name in req.presets:
-            res = pl.solve(pl.preset(problem, name))
+            scenario_problem = pl.preset(problem, name)
+            res = pl.solve(scenario_problem)
+            if name == "minimal_changes" and res.get("changes") and not any(c["delta"] for c in res["changes"]):
+                # A conservative scenario must still answer the user's question when priorities clearly differ.
+                retry = pl.preset(problem, name)
+                retry.change_penalty = min(retry.change_penalty, 0.03)
+                candidate = pl.solve(retry)
+                if candidate.get("changes") and any(c["delta"] for c in candidate["changes"]):
+                    res = candidate
+                    res["minimal_change_retry"] = True
             res["preset"] = name
             res["status_message_ru"], res["status_message_kz"] = PLAN_STATUS[res["status"]]
+            if res.get("validation", {}).get("valid"):
+                res["verdict_ru"] = "Оптимальный план, ограничения проверены" if res["status"] == "optimal" else "Допустимый план, ограничения проверены"
+                res["verdict_kz"] = "Оңтайлы жоспар, шектеулер тексерілді" if res["status"] == "optimal" else "Жарамды жоспар, шектеулер тексерілді"
+                res["human_status"] = "ready"
+            else:
+                res["verdict_ru"] = res["status_message_ru"]
+                res["verdict_kz"] = res["status_message_kz"]
+                res["human_status"] = "needs_attention"
+            res["technical_details"] = {
+                "solver_status": res["status"], "method_version": res.get("method_version"),
+                "weights_version": res.get("weights_version"), "objective": res.get("objective"),
+                "objective_value": res.get("objective_value"), "solver": res.get("solver"),
+                "minimal_change_retry": res.get("minimal_change_retry", False),
+            }
             if res.get("conflict"):
                 res["conflict"]["constraints"] = [label_constraint(c) for c in res["conflict"]["constraints"]]
             scenarios.append(res)

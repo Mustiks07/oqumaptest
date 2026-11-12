@@ -25,7 +25,7 @@ from ..errors import ApiError, not_found
 from .common import fingerprint, get_dataset
 from .messages import render_reasons
 
-METHOD_VERSION = f"{scoring.METHOD_VERSION_SCORING}+std-v1"
+METHOD_VERSION = f"{scoring.METHOD_VERSION_SCORING}+misconception-v2+std-v1"
 BANDS = {"difficult": 0.55, "attention": 0.70}  # conventional thresholds, not mastery probabilities
 MIN_LEARNERS_TOPIC = 30
 MIN_CLASSES_TOPIC = 3
@@ -296,17 +296,21 @@ def overview(session: Session, org_id: str, dataset_id: str, f: Filters, user_id
                 status, reason = "insufficient_data", "small_sample"
             else:
                 status, reason = (_band(summ.mean) or "no_data"), None
+            suppressed = status == "insufficient_data"
             topics_out.append({
                 "topic_id": t.id, "code": t.code, "title_ru": t.title_ru, "title_kz": t.title_kz,
                 "status": status, "status_reason": reason,
-                "score": summ.as_dict() if status not in ("not_measured", "unverified_mapping") else None,
-                "band": _band(summ.mean) if status not in ("not_measured", "unverified_mapping") else None,
+                "score": summ.as_dict() if status not in ("not_measured", "unverified_mapping", "insufficient_data") else None,
+                "band": _band(summ.mean) if status not in ("not_measured", "unverified_mapping", "insufficient_data") else None,
                 "n_items": int(len(w)), "n_items_proposed_only": int(len(set(w_prop["item_id"]) - set(w_conf["item_id"]))),
                 "objectives_total": len(objs), "objectives_measured": len(measured_objs),
                 "coverage": (len(measured_objs) / len(objs)) if objs else None,
-                "deficit": (1 - summ.mean) if (summ.mean is not None and status not in ("not_measured", "unverified_mapping")) else None,
+                "deficit": (1 - summ.mean) if (summ.mean is not None and not suppressed and
+                                                status not in ("not_measured", "unverified_mapping")) else None,
+                "suppressed": suppressed,
+                "suppression_reason": "small_group" if suppressed else None,
             })
-            if not scores.empty and status not in ("not_measured", "unverified_mapping"):
+            if not scores.empty and status not in ("not_measured", "unverified_mapping", "insufficient_data"):
                 cm = scores.groupby("cohort_id")["score"].agg(["mean", "size"])
                 for c in cohorts_in:
                     if c in cm.index:
@@ -393,9 +397,11 @@ def topic_evidence(session: Session, org_id: str, dataset_id: str, topic_id: str
         istats = scoring.item_statistics(resp).set_index("item_id") if not resp.empty else pd.DataFrame()
         dcounts = scoring.distractor_counts(resp)
         items_out = []
-        misconception_learners: dict[str, set] = defaultdict(set)
+        # A single distractor choice is too noisy to call a stable pattern. Count a learner only
+        # after repeated opportunities and repeated selections of the same misconception code.
+        misconception_selections: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        misconception_opportunities: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         misconception_items: dict[str, set] = defaultdict(set)
-        answered_learners = set(resp.loc[resp["item_id"].isin(w["item_id"]) & (resp["status"] == "answered"), "learner_id"]) if not resp.empty else set()
         topic_items = sorted(w["item_id"], key=lambda i: meta.items[i].code)
         for iid in topic_items:
             it = meta.items[iid]
@@ -408,10 +414,14 @@ def topic_evidence(session: Session, org_id: str, dataset_id: str, topic_id: str
                 opts.append({"key": opt["key"], "text": opt["text"], "correct": opt["correct"],
                              "misconception": opt["misconception"], "count": cnt,
                              "share": (cnt / n_ans) if n_ans else None})
-                if opt["misconception"] and cnt and opt["misconception"] != "calc_error":
-                    sel = resp[(resp["item_id"] == iid) & (resp["response_value"] == opt["key"])]["learner_id"]
-                    misconception_learners[opt["misconception"]].update(sel)
-                    misconception_items[opt["misconception"]].add(it.code)
+                code = opt["misconception"]
+                if code and code != "calc_error":
+                    answered = resp[(resp["item_id"] == iid) & (resp["status"] == "answered")]
+                    for learner_id in answered["learner_id"].unique():
+                        misconception_opportunities[code][learner_id] += 1
+                    for learner_id in answered.loc[answered["response_value"] == opt["key"], "learner_id"]:
+                        misconception_selections[code][learner_id] += 1
+                    misconception_items[code].add(it.code)
             item_links = meta.links[meta.links["item_id"] == iid]
             items_out.append({
                 "item_id": iid, "code": it.code, "stem_ru": it.stem_ru, "stem_kz": it.stem_kz,
@@ -424,16 +434,28 @@ def topic_evidence(session: Session, org_id: str, dataset_id: str, topic_id: str
                 "omit_rate": scoring.finite_or_none(st["omit_rate"]) if st is not None else None,
                 "options": opts,
             })
-        n_ans_learners = len(answered_learners)
         misconceptions = []
-        for code, learners in sorted(misconception_learners.items(), key=lambda kv: -len(kv[1])):
+        for code, opportunities in misconception_opportunities.items():
+            eligible = {learner_id for learner_id, n in opportunities.items() if n >= 2}
+            repeated = {learner_id for learner_id in eligible if misconception_selections[code].get(learner_id, 0) >= 2}
+            if not repeated:
+                continue
             ru, kz, check = MISCONCEPTIONS.get(code, (code, code, "Проверить гипотезу дополнительным заданием."))
+            numerator = sum(misconception_selections[code].get(x, 0) for x in eligible)
+            denominator = sum(opportunities[x] for x in eligible)
             misconceptions.append({
                 "code": code, "label_ru": ru, "label_kz": kz, "diagnostic_check_ru": check,
-                "n_learners": len(learners), "share_of_learners": (len(learners) / n_ans_learners) if n_ans_learners else None,
+                "n_learners": len(repeated), "share_of_learners": (len(repeated) / len(eligible)) if eligible else None,
+                "eligible_learners": len(eligible), "selection_numerator": numerator,
+                "opportunity_denominator": denominator,
+                "opportunity_share": (numerator / denominator) if denominator else None,
                 "items": sorted(misconception_items[code]),
                 "interpretation": "hypothesis",  # a chosen distractor is a signal to verify, not a diagnosis
+                "method": "repeated_selection_v2",
+                "method_note_ru": "Ученик учитывается только при двух и более возможностях и двух и более одинаковых выборах.",
+                "method_note_kz": "Оқушы кемінде екі мүмкіндік пен кемінде екі бірдей таңдау болғанда ғана есептеледі.",
             })
+        misconceptions.sort(key=lambda x: (-x["n_learners"], -x["opportunity_share"], x["code"]))
 
         class_rows = []
         if not scores.empty:
@@ -458,11 +480,25 @@ def topic_evidence(session: Session, org_id: str, dataset_id: str, topic_id: str
             status = "unverified_mapping" if not any_links.empty else "not_measured"
         else:
             status = "insufficient_data"
+        suppressed = status == "insufficient_data"
+        if suppressed:
+            # Keep curriculum and item wording visible, but never disclose outcome estimates/counts
+            # for a group that the API itself has declared insufficient.
+            for objective in objectives:
+                objective["score"] = None
+            for item in items_out:
+                item.update({"n_answered": None, "n_omitted": None, "p_correct": None, "omit_rate": None})
+                for option in item["options"]:
+                    option.update({"count": None, "share": None})
+            for prerequisite in prereq:
+                prerequisite["score"] = None
+            misconceptions = []
+            class_rows = []
         return {
             "topic": {"topic_id": topic.id, "code": topic.code, "title_ru": topic.title_ru, "title_kz": topic.title_kz},
             "status": status,
-            "summary": summ.as_dict() if not w.empty else None,
-            "band": _band(summ.mean) if not w.empty else None,
+            "summary": summ.as_dict() if not w.empty and not suppressed else None,
+            "band": _band(summ.mean) if not w.empty and not suppressed else None,
             "objectives": objectives,
             "items": items_out,
             "misconceptions": misconceptions,
@@ -470,14 +506,17 @@ def topic_evidence(session: Session, org_id: str, dataset_id: str, topic_id: str
             "prerequisites": prereq,
             "sources": sources,
             "exclusions": {
-                "absent_sittings": abs_["absent"],
-                "omitted_responses": int(resp.loc[resp["item_id"].isin(w["item_id"]), "status"].eq("omitted").sum()) if not resp.empty else 0,
-                "learners_with_repeat_attempts": repeat_learners,
-                "rejected_import_rows": rejected,
+                "absent_sittings": None if suppressed else abs_["absent"],
+                "omitted_responses": None if suppressed else (int(resp.loc[resp["item_id"].isin(w["item_id"]), "status"].eq("omitted").sum()) if not resp.empty else 0),
+                "learners_with_repeat_attempts": None if suppressed else repeat_learners,
+                "rejected_import_rows": None if suppressed else rejected,
             },
             "rules": {"attempt_rule": f.attempt_rule, "omitted_policy": f.omitted_policy, "aggregation": f.aggregation,
-                      "mapping_status": f.mapping_status},
+                      "mapping_status": f.mapping_status, "misconception_method": "repeated_selection_v2",
+                      "small_group_suppression": "n<30 learners or <3 classes"},
             "outcome_assessments": [a.code for a in outcome],
+            "suppressed": suppressed,
+            "suppression_reason": "small_group" if suppressed else None,
         }
 
     return persist_or_reuse(session, org_id, meta.dataset, "topic_evidence", f.model_dump(), {"topic_id": topic.id},

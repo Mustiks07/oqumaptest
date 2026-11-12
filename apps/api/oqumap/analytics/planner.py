@@ -36,6 +36,7 @@ class TopicConstraint:
     elapsed_hours: int = 0
     max_change: int | None = None
     title: str = ""
+    evidence: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -312,6 +313,7 @@ def solve(problem: PlanProblem) -> dict:
                 "after": hours[t.topic_id],
                 "delta": hours[t.topic_id] - t.current_hours,
                 "priority": t.priority,
+                **_change_explanation(t, hours[t.topic_id], problem.topics, hours),
             }
             for t in problem.topics
         ]
@@ -320,6 +322,72 @@ def solve(problem: PlanProblem) -> dict:
     elif status == "infeasible":
         result["conflict"] = explain_infeasibility(problem)
     return result
+
+
+def _pct(value: float | None) -> str | None:
+    return None if value is None else f"{100 * value:.1f}".replace(".", ",") + "%"
+
+
+def _change_explanation(topic: TopicConstraint, after: int, topics: list[TopicConstraint],
+                        hours: dict[str, int]) -> dict:
+    """Human, evidence-linked rationale for every row of the proposed plan."""
+    delta = after - topic.current_hours
+    facts = topic.evidence or {}
+    score = _pct(facts.get("score"))
+    weak = facts.get("weakest_objective") or {}
+    weak_score = _pct(weak.get("score"))
+    prereqs = [p for p in facts.get("prerequisites", []) if p.get("score") is not None and p["score"] < 0.70]
+    recipients = [t for t in topics if hours[t.topic_id] > t.current_hours]
+    recipient_names_ru = ", ".join((t.evidence or {}).get("title_ru") or t.title or t.code for t in recipients[:2])
+    recipient_names_kz = ", ".join((t.evidence or {}).get("title_kz") or t.title or t.code for t in recipients[:2])
+
+    if delta > 0:
+        parts_ru = [f"Добавить {delta} ч."]
+        parts_kz = [f"{delta} сағат қосу."]
+        support = facts.get("prerequisite_support_for") or []
+        if support:
+            targets = ", ".join(x.get("title_ru") or x.get("code", "") for x in support[:2])
+            targets_kz = ", ".join(x.get("title_kz") or x.get("code", "") for x in support[:2])
+            parts_ru.append(f"Тема укрепляет пререквизит для трудного раздела «{targets}».")
+            parts_kz.append(f"Тақырып «{targets_kz}» қиын бөлімі үшін пререквизитті нығайтады.")
+        if score:
+            parts_ru.append(f"Текущий результат — {score}.")
+            parts_kz.append(f"Ағымдағы нәтиже — {score}.")
+        if weak and weak_score:
+            parts_ru.append(f"Самая слабая цель «{weak.get('text_ru') or weak.get('code')}» — {weak_score}.")
+            parts_kz.append(f"Ең әлсіз мақсат «{weak.get('text_kz') or weak.get('code')}» — {weak_score}.")
+        if prereqs:
+            p = prereqs[0]
+            ps = _pct(p.get("score"))
+            parts_ru.append(f"Слабая основа «{p.get('text_ru') or p.get('code')}» — {ps}; её нужно поддержать вместе с темой.")
+            parts_kz.append(f"«{p.get('text_kz') or p.get('code')}» әлсіз негізі — {ps}; оны тақырыппен бірге қолдау керек.")
+        return {"reason_kind": "investment", "reason_ru": " ".join(parts_ru), "reason_kz": " ".join(parts_kz),
+                "evidence": facts, "donor_reason_ru": None, "donor_reason_kz": None}
+
+    if delta < 0:
+        amount = abs(delta)
+        parts_ru = [f"Высвободить {amount} ч для темы «{recipient_names_ru}»." if recipient_names_ru else f"Высвободить {amount} ч."]
+        parts_kz = [f"«{recipient_names_kz}» тақырыбына {amount} сағат босату." if recipient_names_kz else f"{amount} сағат босату."]
+        if score:
+            parts_ru.append(f"Тема-донор показывает {score}; её нижняя граница и уже проведённые часы соблюдены.")
+            parts_kz.append(f"Донор-тақырып нәтижесі {score}; төменгі шек пен өткізілген сағаттар сақталды.")
+        else:
+            parts_ru.append("Выбор донора основан на меньшем приоритете; все ограничения проверены.")
+            parts_kz.append("Донор төменірек басымдық бойынша таңдалды; барлық шектеулер тексерілді.")
+        reason_ru, reason_kz = " ".join(parts_ru), " ".join(parts_kz)
+        return {"reason_kind": "donor", "reason_ru": reason_ru, "reason_kz": reason_kz, "evidence": facts,
+                "donor_reason_ru": reason_ru, "donor_reason_kz": reason_kz}
+
+    if facts.get("protected_from_reduction"):
+        reason_ru = facts.get("protection_reason_ru") or "Часы сохранены: сначала нужна диагностика."
+        reason_kz = facts.get("protection_reason_kz") or "Сағат сақталды: алдымен диагностика қажет."
+        kind = "protected"
+    else:
+        reason_ru = "Часы сохранены: изменение не даёт дополнительной ценности при текущем бюджете и ограничениях."
+        reason_kz = "Сағат сақталды: ағымдағы бюджет пен шектеулерде өзгеріс қосымша құндылық бермейді."
+        kind = "unchanged"
+    return {"reason_kind": kind, "reason_ru": reason_ru, "reason_kz": reason_kz, "evidence": facts,
+            "donor_reason_ru": None, "donor_reason_kz": None}
 
 
 def _input_errors(problem: PlanProblem) -> list[dict]:
@@ -348,7 +416,8 @@ def preset(problem: PlanProblem, name: str) -> PlanProblem:
 
     p = copy.deepcopy(problem)
     if name == "minimal_changes":
-        p.change_penalty = round(max(problem.change_penalty * 3, 0.15), 4)
+        # Keep the plan conservative without making the current allocation an automatic empty answer.
+        p.change_penalty = round(max(min(problem.change_penalty * 1.4, 0.08), 0.06), 4)
     elif name == "focus_problem_topics":
         p.change_penalty = round(min(problem.change_penalty / 3, 0.015), 4)
     elif name == "balanced":

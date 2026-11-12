@@ -1,6 +1,13 @@
 import itertools
 
-from oqumap.analytics.planner import PlanProblem, TopicConstraint, _feasible_with, solve, validate_plan
+from oqumap.analytics.planner import (
+    PlanProblem,
+    TopicConstraint,
+    _feasible_with,
+    preset,
+    solve,
+    validate_plan,
+)
 
 
 def fixture_problem(**over):
@@ -111,3 +118,24 @@ def test_invalid_input_is_reported():
     p = fixture_problem()
     p.diminishing_rate = 1.5
     assert solve(p)["status"] == "invalid"
+
+
+def test_changes_include_human_evidence_and_separate_donor_reason():
+    p = fixture_problem()
+    p.topics[1].evidence = {
+        "score": 0.471,
+        "weakest_objective": {"code": "6.2.1", "text_ru": "Смешанные числа", "text_kz": "Аралас сандар", "score": 0.433},
+        "prerequisites": [{"code": "6.1.2", "text_ru": "Общий знаменатель", "text_kz": "Ортақ бөлім", "score": 0.504}],
+    }
+    res = solve(p)
+    target = next(x for x in res["changes"] if x["code"] == "TARGET")
+    donor = next(x for x in res["changes"] if x["delta"] < 0)
+    assert target["reason_kind"] == "investment" and "47,1%" in target["reason_ru"] and "43,3%" in target["reason_ru"]
+    assert donor["reason_kind"] == "donor" and donor["donor_reason_ru"] == donor["reason_ru"]
+
+
+def test_minimal_changes_preset_stays_conservative_but_not_empty():
+    res = solve(preset(fixture_problem(), "minimal_changes"))
+    assert res["status"] == "optimal"
+    assert any(x["delta"] for x in res["changes"])
+    assert sum(abs(x["delta"]) for x in res["changes"]) <= 4
