@@ -1,5 +1,6 @@
 /** Second navigation group for the measurement & learning-loop screens (rendered by Layout). */
-import { NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useMeasurementReadiness } from "../../api/hooks";
 import { useAppState } from "../../state/AppState";
 import { useMT } from "./i18n";
@@ -16,23 +17,36 @@ export function MeasurementNav() {
   const { user } = useAppState();
   const readiness = useMeasurementReadiness(!!user?.org_is_ephemeral);
   const waiting = user?.org_is_ephemeral && readiness.data?.status !== "ready";
+  const { pathname } = useLocation();
+  const active = MEASUREMENT_ROUTES.some((route) => pathname.startsWith(route.split("/:")[0]));
+  const [open, setOpen] = useState(active);
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active]);
   return (
-    <div style={{ marginTop: 16 }}>
-      <p className="xs muted" id="m-nav-title" style={{ marginBottom: 4 }}>{t2("nav.group")}</p>
-      {waiting ? (
-        <p className="xs muted" data-testid="measurement-nav-readiness">
-          {readiness.data?.status === "failed" ? t2("nav.failed") : t2("nav.preparing")}
-        </p>
-      ) : (
-        <ul aria-labelledby="m-nav-title" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {LINKS.map((l) => (
-            <li key={l.to}>
-              <NavLink to={l.to} end={l.to === "/pilots/new"} className={({ isActive }) => (isActive ? "active" : "")}>{t2(l.key)}</NavLink>
-            </li>
-          ))}
-        </ul>
+    <section className="nav-group" data-testid="measurement-nav">
+      <button type="button" className="nav-group-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <span id="m-nav-title">{t2("nav.group")}</span>
+        <span aria-hidden="true" className="nav-chevron">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="nav-group-content">
+          {waiting ? (
+            <p className="xs muted" data-testid="measurement-nav-readiness">
+              {readiness.data?.status === "failed" ? t2("nav.failed") : t2("nav.preparing")}
+            </p>
+          ) : (
+            <ul aria-labelledby="m-nav-title" className="nav-list">
+              {LINKS.map((l) => (
+                <li key={l.to}>
+                  <NavLink to={l.to} end={l.to === "/pilots/new"} className={({ isActive }) => (isActive ? "active" : "")}>{t2(l.key)}</NavLink>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
-    </div>
+    </section>
   );
 }
 

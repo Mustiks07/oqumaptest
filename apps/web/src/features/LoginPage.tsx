@@ -6,7 +6,7 @@ import { useConfig } from "../api/hooks";
 import type { LoginResponse } from "../api/types";
 import { useI18n } from "../i18n/I18n";
 import { useAppState } from "../state/AppState";
-import { Alert, Button, Card, Disclosure, ErrorState, Field, Loading, SyntheticBadge } from "../ui";
+import { Alert, Button, Card, Disclosure, ErrorState, Field, Loading } from "../ui";
 
 export function LoginPage() {
   const { t, lang, setLang } = useI18n();
@@ -79,14 +79,12 @@ export function LoginPage() {
         <p>{t("login.lead")}</p>
         {cfg.isLoading ? <Loading /> : c?.demo_login_enabled ? (
           <div className="stack" style={{ marginBottom: 8 }}>
-            <div className="row"><SyntheticBadge /></div>
             <Button variant="primary" onClick={() => openDemo()} disabled={busy !== ""} data-testid="enter-demo"
               style={{ minHeight: 52, fontSize: "var(--text-lg)", alignSelf: "flex-start" }}>
               {t("login.open_demo")}
             </Button>
             {busy === "demo" && <Loading label={t("login.preparing")} />}
             {c.deployment_mode === "public_demo" && <p className="small muted">{t("login.open_demo_note")}</p>}
-            <Alert tone="warn">{t("login.demo_only")}</Alert>
           </div>
         ) : (
           <Alert tone="info">{t("login.demo_disabled")}</Alert>

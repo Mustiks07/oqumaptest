@@ -5,6 +5,7 @@ test("weekly calendar: compare, explain moves, conflict", async ({ page }) => {
   await page.goto("/login");
   await page.getByTestId("enter-demo").click();
   await expect(page.getByTestId("topics-table")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("nav-tools-group").getByRole("button").click();
   await page.getByTestId("nav-calendar").click();
   await expect(page.getByTestId("cal-gantt")).toContainText("T3");
   await page.getByText("Часы тем и закреплённые недели").click();

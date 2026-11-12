@@ -51,6 +51,7 @@ test("demo in 3 minutes: preflight and seven read-only screens", async ({ page }
 
 test("graph → council, sandbox scenarios, quiz review", async ({ page }) => {
   await login(page);
+  await page.getByTestId("nav-tools-group").getByRole("button").click();
   await page.getByTestId("nav-graph").click();
   await expect(page.getByTestId("graph-path")).toContainText("Пробел");
   await page.getByTestId("run-council").click();
@@ -86,6 +87,7 @@ test("language filter shows the Kazakh-medium classes", async ({ page }) => {
   await page.getByTestId("enter-demo").click();
   await expect(page.getByTestId("topics-table")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("overview-counts")).toContainText("32");
+  await page.getByTestId("filters-disclosure").locator("summary").click();
   await page.getByLabel("Язык обучения").selectOption("kz");
   await expect(page.getByTestId("overview-counts")).toContainText("3 класс");
   await page.getByRole("button", { name: "KZ" }).click();

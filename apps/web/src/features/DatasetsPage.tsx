@@ -8,7 +8,7 @@ import { AiStatusCard } from "./AiStatusCard";
 import { useI18n } from "../i18n/I18n";
 import type { DictKey } from "../i18n/dict";
 import { useAppState } from "../state/AppState";
-import { Alert, Badge, Button, Card, Disclosure, EmptyState, ErrorState, QueryView, SyntheticBadge } from "../ui";
+import { Alert, Badge, Button, Card, Disclosure, EmptyState, ErrorState, QueryView } from "../ui";
 import { dateTime, num } from "../ui/format";
 import { useMT } from "./measurement/i18n";
 
@@ -50,9 +50,7 @@ export function DatasetsPage() {
       actions={d.id === datasetId ? <Badge tone="ok">{t("datasets.selected")}</Badge> : null}>
       <p className="small">{lang === "kz" ? d.description_kz : d.description_ru}</p>
       <div className="row" style={{ marginBottom: 12 }}>
-        {d.is_synthetic && <SyntheticBadge />}
         <Badge tone="info">{t(`level.${d.data_level}` as DictKey)}</Badge>
-        <Badge>v{d.version}</Badge>
       </div>
       <Button variant={primary ? "primary" : "default"} data-testid={`choose-${d.code}`}
         onClick={() => {

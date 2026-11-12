@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useCurrentDataset, useOverview } from "../api/hooks";
+import { useOverview } from "../api/hooks";
 import type { OverviewResult, TopicOverviewRow } from "../api/types";
 import { useI18n } from "../i18n/I18n";
 import { useAppState } from "../state/AppState";
-import { Alert, Badge, Button, CI, Card, EmptyState, QueryView, ShareBar, StaleBanner, StatusBadge } from "../ui";
+import { Badge, Button, CI, Card, Disclosure, EmptyState, QueryView, ShareBar, StaleBanner, StatusBadge } from "../ui";
 import { heatColor } from "../ui/charts";
 import { num, pct } from "../ui/format";
 import { FilterBar } from "./Filters";
@@ -23,7 +23,6 @@ export function NeedDataset() {
 export function OverviewPage() {
   const { t, lang, pick } = useI18n();
   const { datasetId, setTopicId, markStep } = useAppState();
-  const { dataset } = useCurrentDataset();
   const q = useOverview();
   const nav = useNavigate();
   useEffect(() => {
@@ -47,14 +46,29 @@ export function OverviewPage() {
         {(env) => {
           const r: OverviewResult = env.result;
           const byId = new Map(r.topics.map((tp) => [tp.topic_id, tp]));
+          const weakest = r.topics
+            .filter((topic) => topic.score)
+            .reduce<TopicOverviewRow | null>((current, topic) => !current || (topic.score?.mean ?? 1) < (current.score?.mean ?? 1) ? topic : current, null);
           return (
             <>
               <StaleBanner ctx={env.context} onRecompute={() => q.refetch()} />
+              {weakest?.score && (
+                <section className="overview-insight" data-testid="overview-main-insight" aria-labelledby="overview-insight-title">
+                  <div>
+                    <span className="overview-insight-kicker">{t("overview.main_conclusion")}</span>
+                    <h2 id="overview-insight-title">{t("overview.main_insight", { topic: pick(weakest, "title"), score: pct(weakest.score.mean, lang) })}</h2>
+                    <p>{t("overview.recommend_two_hours")}</p>
+                  </div>
+                  <div className="row">
+                    <Button onClick={() => open(weakest.topic_id)}>{t("overview.open_topic")}</Button>
+                    <Button variant="primary" onClick={() => nav("/planner")}>{t("overview.open_plan")}</Button>
+                  </div>
+                </section>
+              )}
               <p className="small muted" data-testid="overview-counts">
                 {t("overview.counts", { learners: num(r.counts.n_learners, lang), classes: num(r.counts.n_classes, lang), schools: num(r.counts.n_schools, lang), responses: num(r.counts.n_responses, lang) })}
                 {" · "}
                 {t("overview.excluded", { absent: num(r.counts.absent_sittings, lang), omitted: num(r.counts.omitted_responses, lang) })}
-                {" · "}analysis <code>{env.context.analysis_id.slice(0, 8)}</code>, data v{env.context.dataset_version}
               </p>
               <div className="grid grid-2">
                 <Card title={t("overview.priorities")}>
@@ -65,10 +79,10 @@ export function OverviewPage() {
                         return (
                           <li key={tp.topic_id}>
                             <div className="spread">
-                              <span><strong>{tp.code}</strong> {pick(tp, "title")}</span>
+                              <strong>{pick(tp, "title")}</strong>
                               <Button size="sm" variant="primary" onClick={() => open(tp.topic_id)} data-testid={`open-topic-${tp.code}`}>{t("overview.open_topic")}</Button>
                             </div>
-                            <ShareBar value={tp.score?.mean} label={tp.code} />
+                            <ShareBar value={tp.score?.mean} label={pick(tp, "title")} />
                             <CI low={tp.score?.ci_low} high={tp.score?.ci_high} reason={tp.score?.ci_unavailable_reason} />
                           </li>
                         );
@@ -83,8 +97,8 @@ export function OverviewPage() {
                         const tp = byId.get(g.topic_id as string)!;
                         return (
                           <li key={tp.topic_id}>
-                            <strong>{tp.code}</strong> {pick(tp, "title")} <StatusBadge status={tp.status} />
-                            <div className="xs muted">{tp.n_items_proposed_only > 0 ? `${tp.n_items_proposed_only} ${t("topic.n_items_prop")}` : tp.status_reason}</div>
+                            <strong>{pick(tp, "title")}</strong> <StatusBadge status={tp.status} />
+                            <div className="xs muted">{tp.n_items_proposed_only > 0 ? `${tp.n_items_proposed_only} ${t("topic.n_items_prop")}` : t("overview.coverage_needs_items")}</div>
                           </li>
                         );
                       })}
@@ -105,9 +119,9 @@ export function OverviewPage() {
                     <tbody>
                       {r.topics.map((tp: TopicOverviewRow) => (
                         <tr key={tp.topic_id} className="clickable" onClick={() => open(tp.topic_id)}>
-                          <td><strong>{tp.code}</strong> {pick(tp, "title")}</td>
+                          <td><strong>{pick(tp, "title")}</strong></td>
                           <td><StatusBadge status={tp.status} /></td>
-                          <td>{tp.score ? <ShareBar value={tp.score.mean} label={tp.code} /> : <span className="muted">—</span>}</td>
+                          <td>{tp.score ? <ShareBar value={tp.score.mean} label={pick(tp, "title")} /> : <span className="muted">—</span>}</td>
                           <td className="xs">{tp.score?.ci_low != null ? `${pct(tp.score.ci_low, lang)} – ${pct(tp.score.ci_high, lang)}` : "—"}</td>
                           <td className="num">{tp.score ? `${num(tp.score.n_learners, lang)} / ${tp.score.n_classes}` : "—"}</td>
                           <td className="num">{tp.n_items}</td>
@@ -138,7 +152,7 @@ export function OverviewPage() {
                         <tbody>
                           {r.topics.filter((tp) => tp.score).map((tp) => (
                             <tr key={tp.topic_id}>
-                              <td className="small"><strong>{tp.code}</strong></td>
+                              <td className="small"><strong>{pick(tp, "title")}</strong></td>
                               {r.heatmap.cohorts.map((c) => {
                                 const cell = r.heatmap.cells.find((x) => x.topic_id === tp.topic_id && x.cohort_id === c.cohort_id);
                                 return (
@@ -156,8 +170,9 @@ export function OverviewPage() {
                   </>
                 )}
               </Card>
-              {dataset?.is_synthetic && <Alert tone="info">{t("synthetic.note")}</Alert>}
-              <div className="row"><Badge>method {env.context.method_version}</Badge></div>
+              <Disclosure summary={t("overview.calculation_details")}>
+                <div className="row"><Badge>{t("overview.data_version")} {env.context.dataset_version}</Badge><Badge>{t("overview.method_version")} {env.context.method_version}</Badge></div>
+              </Disclosure>
             </>
           );
         }}

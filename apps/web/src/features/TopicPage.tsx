@@ -42,8 +42,8 @@ export function TopicPage() {
               <StaleBanner ctx={env.context} onRecompute={() => q.refetch()} />
               <div className="page-header">
                 <div>
-                  <h1 data-testid="topic-title">{r.topic.code as string} · {pick(r.topic as Record<string, unknown>, "title")}</h1>
-                  <div className="row"><StatusBadge status={r.status} /> <span className="xs muted">analysis <code>{env.context.analysis_id.slice(0, 8)}</code> · data v{env.context.dataset_version}</span></div>
+                  <h1 data-testid="topic-title">{pick(r.topic as Record<string, unknown>, "title")}</h1>
+                  <div className="row"><StatusBadge status={r.status} /></div>
                 </div>
                 <div className="row">
                   <Button onClick={() => nav("/compare")} variant="primary">{t("topic.to_compare")}</Button>

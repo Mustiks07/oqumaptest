@@ -207,7 +207,6 @@ function DecisionDetail({ id }: { id: string }) {
         return (
           <div className="stack" data-testid="decision-detail">
             <Card title={`${t("decision.title")} · v${d.version}`} actions={<StatusBadge status={d.status} labelKey={`decision.status.${d.status}` as DictKey} />}>
-              {d.is_synthetic && <Alert tone="info">{t("synthetic.note")}</Alert>}
               {d.is_stale && <div style={{ marginTop: 8 }}><Alert tone="warn" title={t("stale.title")}>{d.status === "draft" ? t("decision.stale") : t("decision.stale_approved")} (v{d.dataset_version} → v{d.current_dataset_version})</Alert></div>}
               <dl className="kv" style={{ marginTop: 12 }}>
                 <dt>{t("decision.target_group")}</dt><dd>{d.target_group}</dd>

@@ -25,6 +25,7 @@ test("full methodist path", async ({ page }) => {
 
   await expect(page.getByTestId("guide-overview")).toHaveAttribute("data-done", "1");
   // overview + filters survive a language switch
+  await page.getByTestId("filters-disclosure").locator("summary").click();
   await page.getByLabel("Правило попыток").selectOption("last");
   await expect(page.getByTestId("overview-counts")).toBeVisible();
   await page.getByRole("button", { name: "KZ" }).click();
@@ -36,7 +37,7 @@ test("full methodist path", async ({ page }) => {
 
   // topic
   await page.getByTestId("open-topic-T3").click();
-  await expect(page.getByTestId("topic-title")).toContainText("T3");
+  await expect(page.getByTestId("topic-title")).toBeVisible();
   await expect(page.getByTestId("topic-score")).toContainText("%");
   await page.getByTestId("interpret-add_across").click();
   await expect(page.getByText("Записанный демо-пример").first()).toBeVisible();
@@ -104,6 +105,7 @@ test("planner shows a verified conflict", async ({ page }) => {
 
 test("structural import blocks a broken item bank and lists rejected rows", async ({ page }) => {
   await login(page);
+  await page.getByTestId("nav-tools-group").getByRole("button").click();
   await page.getByTestId("nav-import").click();
   await page.getByTestId("project-name").fill("Проверка ошибок импорта");
   await page.getByTestId("create-project").click();

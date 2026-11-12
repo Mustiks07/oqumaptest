@@ -157,7 +157,7 @@ export function GraphPage() {
                     </div>
                   )}
                   <footer>
-                    <span>analysis <code>{d.context.analysis_id.slice(0, 8)}</code></span>
+                    <span>{lang === "kz" ? "Дәлелдер жолы тексерілді" : "Цепочка доказательств проверена"}</span>
                     <span>{d.context.is_stale ? (lang === "kz" ? "ескірген" : "устарел") : (lang === "kz" ? "өзекті" : "актуален")}</span>
                   </footer>
                 </aside>

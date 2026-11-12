@@ -201,12 +201,19 @@ export function SyntheticBadge() {
 export function ModeBadge({ mode, fallback }: { mode: string; fallback?: string | null }) {
   const { t } = useI18n();
   const tone: Tone = mode === "live_model" ? "info" : mode === "recorded_demo" ? "synthetic" : "neutral";
+  const fallbackKey = fallback === "model_not_configured" || fallback?.startsWith("llm_misconfigured")
+    ? "ai.fallback.not_configured"
+    : fallback === "numeric_check_failed" || fallback === "verification_failed"
+      ? "ai.fallback.verification"
+      : fallback?.startsWith("live_")
+        ? "ai.fallback.live_unavailable"
+        : "ai.fallback.generic";
   return (
     <span className="row" style={{ gap: 6 }}>
       <Badge tone={tone}>{t(`ai.mode.${mode}` as DictKey)}</Badge>
       {fallback && (
         <span className="xs muted">
-          {t("ai.fallback")}: <code>{fallback}</code>
+          {t(fallbackKey)}
         </span>
       )}
     </span>

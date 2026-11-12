@@ -137,7 +137,8 @@ code,
   height: calc(100vh - var(--header-height));
   overflow-y: auto;
 }
-.app-nav ol {
+.app-nav .scenario-nav,
+.app-nav .nav-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -191,6 +192,57 @@ code,
   border-color: color-mix(in srgb, var(--color-primary) 36%, transparent);
   background: var(--color-primary-soft);
 }
+.tour-link { margin-bottom: 12px; color: var(--color-primary) !important; font-weight: var(--weight-medium); }
+.nav-eyebrow {
+  margin: 0 8px 6px;
+  color: var(--color-text-tertiary);
+  font-size: 0.66rem;
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.nav-group,
+.guide-compact {
+  margin-top: 10px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 8px;
+}
+.nav-group-toggle {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.nav-group-toggle:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); color: var(--color-text); }
+.nav-group-toggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.nav-chevron { color: var(--color-text-tertiary); font-size: 1rem; }
+.nav-group-content { padding-top: 2px; }
+.guide-compact summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.guide-compact summary::-webkit-details-marker { display: none; }
+.guide-compact summary:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.guide-compact summary > span:first-child { display: flex; justify-content: space-between; gap: 8px; font-size: var(--text-sm); }
+.guide-compact .bar-track { display: block; height: 4px; margin-top: 7px; }
+.guide-content { padding: 6px 0 0; }
+.guide-content ol { list-style: none; margin: 0; padding: 0; }
+.guide-content a { padding: 3px 8px; min-height: 28px; font-size: var(--text-xs); }
+.guide-content p { margin: 8px 8px 4px; line-height: 1.4; }
+.guide-status { width: 16px; flex: none; }
 .app-main {
   padding: 28px 30px 96px;
   min-width: 0;
@@ -268,7 +320,7 @@ code,
     border-right: none;
     border-bottom: 1px solid var(--color-border);
   }
-  .app-nav ol {
+  .app-nav .scenario-nav {
     display: flex;
     overflow-x: auto;
     gap: var(--space-1);

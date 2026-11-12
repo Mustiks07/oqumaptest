@@ -3,7 +3,7 @@ import type { Filters } from "../api/types";
 import { useI18n } from "../i18n/I18n";
 import type { DictKey } from "../i18n/dict";
 import { useAppState } from "../state/AppState";
-import { Card, Field, Select } from "../ui";
+import { Field, Select } from "../ui";
 
 /** Shared filter bar; the same filters drive every analysis, the assistant and the report. */
 export function FilterBar({ compact = false }: { compact?: boolean }) {
@@ -12,8 +12,15 @@ export function FilterBar({ compact = false }: { compact?: boolean }) {
   const cur = useCurriculum();
   const set = (patch: Partial<Filters>) => setFilters({ ...filters, ...patch });
   const opt = (prefix: string, values: string[]) => values.map((v) => ({ value: v, label: t(`${prefix}.${v}` as DictKey) }));
+  const school = cur.data?.schools.find((item) => item.id === filters.school_ids?.[0])?.code ?? t("filters.all_schools");
+  const cohort = cur.data?.cohorts.find((item) => item.id === filters.cohort_ids?.[0])?.code ?? t("filters.all_classes");
+  const attempt = t(`filters.attempt.${filters.attempt_rule ?? "first"}` as DictKey);
   return (
-    <Card className="filters-card">
+    <details className="card filters-card" data-testid="filters-disclosure">
+      <summary className="filters-summary">
+        <span><strong>{t("filters.title")}</strong><span className="muted">{school} · {cohort} · {attempt}</span></span>
+        <span className="filters-action">{t("filters.change")}</span>
+      </summary>
       <div className="filters" data-testid="filters">
         <Field label={t("filters.schools")}>
           {(id) => (
@@ -59,6 +66,6 @@ export function FilterBar({ compact = false }: { compact?: boolean }) {
         </Field>
       </div>
       {!compact && <p className="xs muted" style={{ margin: "8px 0 0" }}>{t("filters.applied")}</p>}
-    </Card>
+    </details>
   );
 }

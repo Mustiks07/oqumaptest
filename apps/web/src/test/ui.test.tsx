@@ -15,7 +15,7 @@ test("stale banner is shown only for stale analyses", () => {
 test("AI mode is always visible to the user", () => {
   wrap(<ModeBadge mode="template" fallback="model_not_configured" />);
   expect(screen.getByText("Шаблон без модели")).toBeInTheDocument();
-  expect(screen.getByText("model_not_configured")).toBeInTheDocument();
+  expect(screen.getByText("ИИ-модель не подключена — используется проверенный сценарий")).toBeInTheDocument();
 });
 
 test("error state shows the request id and a retry button", () => {
