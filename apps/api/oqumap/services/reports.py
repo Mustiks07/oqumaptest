@@ -272,7 +272,6 @@ def to_pdf(dec: dict, lang: str = "ru", appendix: bool = False) -> bytes:
     topic = s.get("topic") or {}
     title = topic.get(f"title_{lang}") or topic.get("title_ru")
     rec = s.get("recommendation") or {}
-    hours = rec.get("hours")
     material = rec.get("material") or {}
     plan = s.get("plan")
     comp = s.get("comparison")
