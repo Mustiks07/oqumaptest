@@ -1,7 +1,7 @@
 """Who may spend the model budget, and when the live path must not be used.
 
-Live calls require: a configured provider, a non-demo tenant, an allowed role, remaining call quota (per org per
-day, per user per hour) and token budget (per org per day), a closed circuit breaker, and — for non-synthetic
+Live calls require: a configured provider, an allowed role, remaining call quota (per org per day, per user per
+hour) and token budget (per org per day), a closed circuit breaker, and — for non-synthetic
 data — an explicit operator permission for a provider whose data policy allows it. All counters live in the
 shared ``rate_limits`` table, so they hold across API/worker processes.
 """
@@ -35,8 +35,6 @@ class LiveGate:
 
     def acquire_dry_run(self) -> str | None:
         s = get_settings()
-        if self.org_is_ephemeral or (s.deployment_mode == "public_demo" and self.org_is_demo):
-            return "live_disabled_for_public_demo"
         if not set(self.roles) & set(s.llm_live_roles):
             return "live_not_allowed_for_role"
         return None

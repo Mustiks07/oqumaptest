@@ -85,8 +85,12 @@ class CountingProvider(Provider):
         CountingProvider.calls += 1
         return {"text": "x", "limitations": []}, CallMeta("fake", "fake-model", 1)
 
+    def run_tools(self, system, user, tools, execute, max_steps=4):
+        CountingProvider.calls += 1
+        return "Живой ответ", [], CallMeta("fake", "fake-model", 1)
 
-def test_public_demo_never_spends_live_model_budget(public):
+
+def test_public_demo_uses_live_model_for_synthetic_tenant(public):
     h, b = demo(public)
     cur = public.get("/api/v1/curriculum", params={"dataset_id": b["recommended_dataset_id"]}, headers=h).json()
     t3 = next(t["id"] for t in cur["topics"] if t["code"] == "T3")
@@ -101,9 +105,9 @@ def test_public_demo_never_spends_live_model_budget(public):
                                                          "context": {"dataset_id": b["recommended_dataset_id"]}}, headers=h).json()
     finally:
         prov.set_provider_for_tests(None)
-    assert CountingProvider.calls == 0
-    assert r["mode"] == "template" and r["fallback_reason"] == "live_disabled_for_public_demo"
-    assert a["mode"] == "template" and a["fallback_reason"] == "live_disabled_for_public_demo"
+    assert CountingProvider.calls == 2
+    assert r["mode"] == "live_model" and r["fallback_reason"] is None
+    assert a["mode"] == "live_model" and a["fallback_reason"] is None
 
 
 def test_rate_limits_and_quotas(public, monkeypatch):

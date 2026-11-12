@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OQUMAP_", env_file=(".env", "../../.env"), extra="ignore")
 
     # dev: QA personas (shared demo org, other_org) enabled
-    # public_demo: one-click demo creates a disposable tenant per visitor; no live AI for demo tenants
+    # public_demo: one-click demo creates a disposable tenant per visitor; live AI is allowed only for synthetic data
     # production: demo login disabled; only password accounts
     deployment_mode: str = "dev"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/oqumap"
