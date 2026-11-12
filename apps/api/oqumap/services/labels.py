@@ -44,9 +44,14 @@ _STOP = {"и", "в", "на", "по", "с", "к", "для", "за", "счёт", "
          "пособие", "пособий", "учебник", "учебники", "учебника", "оқулық", "құрал", "салыстыр", "неше", "қанша"}
 
 
+_VERB_STEMS = ("добав", "увелич", "сократ", "сним", "убер", "убра", "усил", "укреп", "сдела", "остав", "трога", "меня",
+               "уменьш", "установ", "прибав", "забра", "перенес", "қысқарт", "күшейт", "жаса")
+
+
 def _stems(text: str) -> set[str]:
+    """4-letter word prefixes: "дроби"/"дробей" → "дроб" (Russian and Kazakh endings vary, the root stays)."""
     words = re.findall(r"[a-zа-яёәғқңөұүһі]+", text.lower())
-    return {w[:5] if len(w) > 5 else w for w in words if len(w) >= 4 and w not in _STOP}
+    return {w[:4] for w in words if len(w) >= 4 and w not in _STOP and not w.startswith(_VERB_STEMS)}
 
 
 @dataclass
@@ -74,11 +79,7 @@ def match_topics(text: str, topics: list[TopicRef]) -> list[TopicRef]:
         return []
     scored = []
     for t in topics:
-        title = _stems(t.title_ru) | _stems(t.title_kz)
-        hit = len(stems & title)
-        # a 4-letter prefix still counts ("дроби" vs "дробей"), but weaker than a 5-letter stem
-        weak = len({s[:4] for s in stems} & {s[:4] for s in title}) - hit
-        score = hit + 0.5 * max(0, weak)
+        score = len(stems & (_stems(t.title_ru) | _stems(t.title_kz)))
         if score > 0:
             scored.append((score, t))
     if not scored:

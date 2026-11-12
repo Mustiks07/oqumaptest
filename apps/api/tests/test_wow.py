@@ -301,3 +301,49 @@ def test_kazakh_medium_classes_are_filterable_and_do_not_bias_comparison(client,
     r = client.post("/api/v1/comparisons", json={"dataset_id": ds, "topic_id": _topic(curriculum, "T3")["id"],
                                                  "edition_a_id": ed["EDA"], "edition_b_id": ed["EDB"]}, headers=H).json()["result"]
     assert r["status"] == "comparable" and "language_mismatch" not in {x["code"] for x in r["reasons"]}
+
+
+def test_sandbox_understands_topic_names_in_russian_and_kazakh(client, H, datasets):
+    ds = datasets["base"]["id"]
+
+    def preview(text, lang="ru"):
+        r = client.post("/api/v1/sandbox/intent", json={"dataset_id": ds, "text": text, "lang": lang}, headers=H)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    p = preview("Добавь 2 часа на сложение дробей за счёт процентов")
+    assert [(o["op"], o["topic"], o["value"]) for o in p["ops"]] == [("add", "T3", 2), ("remove", "T7", 2)]
+    assert p["understood_ru"] == ["Добавить 2 ч: «Сложение и вычитание дробей с разными знаменателями»", "Снять 2 ч: «Проценты»"]
+    assert p["not_understood"] == [] and all(r["title_ru"] for r in p["diff"])
+    p = preview("На сложение дробей сделать 30 часов")
+    assert [(o["op"], o["topic"], o["value"]) for o in p["ops"]] == [("set", "T3", 30)]
+    p = preview("Дроби не трогать, добавить час на проценты")
+    got = {(o["op"], o["topic"]) for o in p["ops"]}
+    assert {("fix", "T2"), ("fix", "T3"), ("fix", "T4"), ("fix", "T5"), ("add", "T7")} == got
+    p = preview("Усилить дроби, убрать часы с устойчивых тем")
+    raised = {o["topic"] for o in p["ops"] if o["op"] == "priority" and o["value"] >= 1}
+    lowered = {o["topic"] for o in p["ops"] if o["op"] == "priority" and o["value"] < 1}
+    assert {"T3", "T2"} <= raised and lowered and not (raised & lowered) and p["not_understood"] == []
+    p = preview("Бөлшектерді қосуға 2 сағат қос, пайыздар есебінен", "kz")
+    assert [(o["op"], o["topic"], o["value"]) for o in p["ops"]] == [("add", "T3", 2), ("remove", "T7", 2)]
+    assert p["understood_kz"][0].startswith("«Бөлімдері әртүрлі бөлшектерді қосу")
+    # "30 hours" is not silently fixed: the solver reports the verified conflict with topic names
+    run = client.post("/api/v1/sandbox/run", json={"dataset_id": ds, "scenarios": [
+        {"name": "A", "ops": preview("На сложение дробей сделать 30 часов")["all_ops"]}]}, headers=H).json()["result"]
+    sc = run["scenarios"][0]
+    assert sc["status"] == "infeasible"
+    assert any("«Сложение и вычитание дробей с разными знаменателями»" in c["message_ru"] for c in sc["conflict"]["constraints"])
+
+
+def test_sandbox_model_extraction_fills_the_strict_schema_only(client, H, datasets, monkeypatch):
+    from oqumap.ai import tasks
+
+    def fake_live(task, system, user, schema, synthetic=True):
+        assert task == "sandbox_intent" and user["topics"][0]["title_ru"]
+        return {"ops": [{"op": "add", "topic": "T3", "value": 1}, {"op": "add", "topic": "T99", "value": 5},
+                        {"op": "explode", "topic": "T1"}]}, {"mode": "live_model", "provider": "fake", "model": "fake-1"}
+
+    monkeypatch.setattr(tasks, "_live_or_none", fake_live)
+    p = client.post("/api/v1/sandbox/intent", json={"dataset_id": datasets["base"]["id"], "text": "чуть-чуть подтянуть самое слабое"},
+                    headers=H).json()
+    assert p["mode"] == "live_model" and [(o["op"], o["topic"]) for o in p["ops"]] == [("add", "T3")]
